@@ -172,12 +172,21 @@ const AdminDashboardScreen = ({ navigation }) => {
     const handleRequestAction = async (requestId, status, userId, musicId) => {
         try {
             if (status === 'rejected') {
+                // Remove request
                 const { error: delError } = await supabase
                     .from('music_requests')
                     .delete()
                     .eq('id', requestId);
                 
                 if (delError) throw delError;
+
+                // Also revoke download permission if it exists
+                await supabase
+                    .from('download_permissions')
+                    .delete()
+                    .eq('user_id', userId)
+                    .eq('music_id', musicId);
+                
                 Alert.alert('Success', 'Request rejected and removed.');
             } else {
                 // Update request status (for approved)
@@ -224,28 +233,42 @@ const AdminDashboardScreen = ({ navigation }) => {
     };
 
     const handleClearHistory = async () => {
-        const processedCount = requests.filter(r => r.status !== 'pending').length;
-        if (processedCount === 0) {
+        if (requests.length === 0) {
             Alert.alert("Clean Dashboard", "There is no history to clear yet!");
             return;
         }
 
         Alert.alert(
-            "Clear History",
-            `Are you sure you want to remove all ${processedCount} processed requests from history? pending requests will remain.`,
+            "Clear All History",
+            `Are you sure you want to permanently remove all ${requests.length} requests? This includes pending ones. Users will need to request again.`,
             [
                 { text: "Cancel", style: "cancel" },
                 { 
                     text: "Clear All", 
                     style: "destructive", 
                     onPress: async () => {
-                        const { error } = await supabase
+                        // 1. Delete all requests
+                        const { error: reqError } = await supabase
                             .from('music_requests')
                             .delete()
-                            .neq('status', 'pending');
+                            .neq('id', '00000000-0000-0000-0000-000000000000');
                         
-                        if (error) Alert.alert('Error', error.message);
-                        else fetchRequests();
+                        if (reqError) {
+                            Alert.alert('Error clearing requests', reqError.message);
+                            return;
+                        }
+
+                        // 2. Delete all download permissions
+                        const { error: permError } = await supabase
+                            .from('download_permissions')
+                            .delete()
+                            .neq('id', '00000000-0000-0000-0000-000000000000');
+                        
+                        if (permError) {
+                            Alert.alert('Error clearing permissions', permError.message);
+                        } else {
+                            fetchRequests();
+                        }
                     } 
                 }
             ]
@@ -423,7 +446,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                     {activeTab === 'Requests' && requests.length > 0 && (
                         <TouchableOpacity style={styles.clearHistoryBar} onPress={handleClearHistory}>
                             <Ionicons name="trash-bin-outline" size={16} color="#aaa" />
-                            <Text style={styles.clearHistoryText}>Clear Processed History</Text>
+                            <Text style={styles.clearHistoryText}>Clear All History</Text>
                         </TouchableOpacity>
                     )}
                     <FlatList

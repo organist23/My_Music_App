@@ -52,6 +52,58 @@ const MusicPlayerScreen = ({ navigation }) => {
         }, [currentTrack])
     );
 
+    // Real-time status sync
+    React.useEffect(() => {
+        if (!currentTrack || !user) return;
+
+        // Channel for music_requests
+        const requestChannel = supabase
+            .channel(`request_sync_${currentTrack.id}`)
+            .on(
+                'postgres_changes',
+                { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'music_requests',
+                    filter: `user_id=eq.${user.id}`
+                },
+                (payload) => {
+                    if (payload.eventType === 'DELETE') {
+                        checkRequestStatus();
+                    } else if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                        if (payload.new.music_id === currentTrack.id) {
+                            // If it's approved, we still want to check permissions for granted_at
+                            checkRequestStatus();
+                        }
+                    }
+                }
+            )
+            .subscribe();
+
+        // Channel for download_permissions
+        const permChannel = supabase
+            .channel(`perm_sync_${currentTrack.id}`)
+            .on(
+                'postgres_changes',
+                { 
+                    event: '*', 
+                    schema: 'public', 
+                    table: 'download_permissions',
+                    filter: `user_id=eq.${user.id}`
+                },
+                () => {
+                    // Re-check status on any permission change
+                    checkRequestStatus();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(requestChannel);
+            supabase.removeChannel(permChannel);
+        };
+    }, [currentTrack, user]);
+
     const checkRequestStatus = async () => {
         if (!currentTrack || !user) return;
         
@@ -67,23 +119,32 @@ const MusicPlayerScreen = ({ navigation }) => {
                 .single();
 
             if (permData) {
-                setRequestStatus('approved');
-            } else {
-                // 2. Check requests
-                const { data: reqData } = await supabase
-                    .from('music_requests')
-                    .select('status')
-                    .eq('user_id', user.id)
-                    .eq('music_id', currentTrack.id)
-                    .single();
-
-                if (reqData) {
-                    if (reqData.status === 'approved') setRequestStatus('approved');
-                    else if (reqData.status === 'pending') setRequestStatus('pending');
-                    else setRequestStatus('none');
-                } else {
-                    setRequestStatus('none');
+                // Check if permission is older than 7 days
+                const grantedAt = new Date(permData.granted_at);
+                const now = new Date();
+                const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+                
+                if (now - grantedAt < sevenDaysInMs) {
+                    setRequestStatus('approved');
+                    return; // Valid permission found
                 }
+                // If expired, we don't return and let it fall through to check for a new pending request
+            }
+            
+            // 2. Check requests
+            const { data: reqData } = await supabase
+                .from('music_requests')
+                .select('status')
+                .eq('user_id', user.id)
+                .eq('music_id', currentTrack.id)
+                .single();
+
+            if (reqData) {
+                if (reqData.status === 'approved') setRequestStatus('approved');
+                else if (reqData.status === 'pending') setRequestStatus('pending');
+                else setRequestStatus('none');
+            } else {
+                setRequestStatus('none');
             }
         } catch (error) {
             console.error('Error checking status:', error);
@@ -96,15 +157,36 @@ const MusicPlayerScreen = ({ navigation }) => {
         if (!user || !currentTrack) return;
 
         try {
-            setCheckingStatus(true);
+            // Optimistic update
+            setRequestStatus('pending');
+            
             const { error } = await supabase
                 .from('music_requests')
                 .upsert({ user_id: user.id, music_id: currentTrack.id, status: 'pending' });
 
+            if (error) {
+                setRequestStatus('none');
+                throw error;
+            }
+        } catch (error) {
+            Alert.alert('Error', error.message);
+        }
+    };
+
+    const handleUndoRequest = async () => {
+        if (!user || !currentTrack) return;
+
+        try {
+            setCheckingStatus(true);
+            const { error } = await supabase
+                .from('music_requests')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('music_id', currentTrack.id);
+
             if (error) throw error;
             
-            Alert.alert('Request Sent', `Your request for "${currentTrack.title}" has been sent to the admin.`);
-            setRequestStatus('pending');
+            setRequestStatus('none');
         } catch (error) {
             Alert.alert('Error', error.message);
         } finally {
@@ -241,9 +323,18 @@ const MusicPlayerScreen = ({ navigation }) => {
                                 </View>
                             </TouchableOpacity>
                         ) : requestStatus === 'pending' ? (
-                            <View style={styles.pendingBadge}>
-                                <Ionicons name="time-outline" size={16} color="#1DB954" />
-                                <Text style={styles.pendingText}>Request Pending</Text>
+                            <View style={styles.pendingRow}>
+                                <View style={styles.pendingBadge}>
+                                    <Ionicons name="time-outline" size={16} color="#1DB954" />
+                                    <Text style={styles.pendingText}>Request Pending</Text>
+                                </View>
+                                <TouchableOpacity 
+                                    style={styles.undoBtn} 
+                                    onPress={handleUndoRequest}
+                                    disabled={checkingStatus}
+                                >
+                                    <Text style={styles.undoBtnText}>Undo</Text>
+                                </TouchableOpacity>
                             </View>
                         ) : (
                             <TouchableOpacity 
@@ -452,7 +543,6 @@ const styles = StyleSheet.create({
     pendingBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 15,
         paddingVertical: 8,
     },
     pendingText: {
@@ -460,6 +550,23 @@ const styles = StyleSheet.create({
         fontSize: 14,
         marginLeft: 8,
         fontWeight: 'bold',
+    },
+    pendingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    undoBtn: {
+        marginLeft: 15,
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 12,
+        backgroundColor: '#333',
+    },
+    undoBtnText: {
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: '600',
     },
     downloadBtn: {
         backgroundColor: '#1DB954',
