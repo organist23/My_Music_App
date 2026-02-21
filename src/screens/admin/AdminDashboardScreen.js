@@ -579,14 +579,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                     numColumns={1}
                     contentContainerStyle={styles.list}
                     showsVerticalScrollIndicator={true}
-                    ListHeaderComponent={
-                        requests.length > 0 ? (
-                            <TouchableOpacity style={styles.clearHistoryBar} onPress={handleClearHistory}>
-                                <Ionicons name="trash-bin-outline" size={16} color="#aaa" />
-                                <Text style={styles.clearHistoryText}>Clear Processed History</Text>
-                            </TouchableOpacity>
-                        ) : null
-                    }
+                    ListHeaderComponent={null}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
                             <Ionicons name="notifications-off-outline" size={60} color="#282828" />
