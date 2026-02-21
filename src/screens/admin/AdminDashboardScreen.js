@@ -267,15 +267,10 @@ const AdminDashboardScreen = ({ navigation }) => {
                             
                             if (reqError) throw reqError;
 
-                            // 2. Delete all download permissions
-                            const { error: permError } = await supabase
-                                .from('download_permissions')
-                                .delete()
-                                .neq('id', '00000000-0000-0000-0000-000000000000');
-                            
-                            if (permError) throw permError;
+                            // Note: We NO LONGER delete from download_permissions here
+                            // to preserve the user's 7-day download access window.
 
-                            Alert.alert('Success', 'All request history and permissions cleared.');
+                            Alert.alert('Success', 'Request history cleared. (Active permissions preserved)');
                             fetchRequests();
                         } catch (error) {
                             Alert.alert('Error clearing history', error.message);
