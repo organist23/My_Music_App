@@ -255,46 +255,30 @@ const AdminDashboardScreen = ({ navigation }) => {
             [
                 { text: "Cancel", style: "cancel" },
                 { 
-                    text: "Force Clear All", 
+                    text: "Clear All", 
                     style: "destructive", 
                     onPress: async () => {
-<<<<<<< HEAD
                         try {
-                            // Delete all requests for this admin's view
-                            const { error } = await supabase
+                            // 1. Delete all requests
+                            const { error: reqError } = await supabase
                                 .from('music_requests')
                                 .delete()
-                                .neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to delete all
+                                .neq('id', '00000000-0000-0000-0000-000000000000');
                             
-                            if (error) throw error;
+                            if (reqError) throw reqError;
+
+                            // 2. Delete all download permissions
+                            const { error: permError } = await supabase
+                                .from('download_permissions')
+                                .delete()
+                                .neq('id', '00000000-0000-0000-0000-000000000000');
                             
-                            Alert.alert('Success', 'All request history cleared.');
+                            if (permError) throw permError;
+
+                            Alert.alert('Success', 'All request history and permissions cleared.');
                             fetchRequests();
                         } catch (error) {
-                            Alert.alert('Error', error.message);
-=======
-                        // 1. Delete all requests
-                        const { error: reqError } = await supabase
-                            .from('music_requests')
-                            .delete()
-                            .neq('id', '00000000-0000-0000-0000-000000000000');
-                        
-                        if (reqError) {
-                            Alert.alert('Error clearing requests', reqError.message);
-                            return;
-                        }
-
-                        // 2. Delete all download permissions
-                        const { error: permError } = await supabase
-                            .from('download_permissions')
-                            .delete()
-                            .neq('id', '00000000-0000-0000-0000-000000000000');
-                        
-                        if (permError) {
-                            Alert.alert('Error clearing permissions', permError.message);
-                        } else {
-                            fetchRequests();
->>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
+                            Alert.alert('Error clearing history', error.message);
                         }
                     } 
                 }
