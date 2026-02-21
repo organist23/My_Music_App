@@ -239,30 +239,19 @@ const AdminDashboardScreen = ({ navigation }) => {
     };
 
     const handleClearHistory = async () => {
-<<<<<<< HEAD
         const totalCount = requests.length;
         if (totalCount === 0) {
-            Alert.alert("Clean Dashboard", "There are no requests to clear!");
-=======
-        if (requests.length === 0) {
-            Alert.alert("Clean Dashboard", "There is no history to clear yet!");
->>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
+            Alert.alert("Clean Dashboard", "There are no requests to clear yet!");
             return;
         }
 
         const pendingCount = requests.filter(r => r.status === 'pending').length;
-        const processedCount = totalCount - pendingCount;
 
         Alert.alert(
-<<<<<<< HEAD
-            "Force Clear History",
+            "Clear Request History",
             pendingCount > 0 
-                ? `Are you sure? This will remove ALL ${totalCount} requests, including ${pendingCount} still pending.`
-                : `Remove all ${processedCount} processed requests from history?`,
-=======
-            "Clear All History",
-            `Are you sure you want to permanently remove all ${requests.length} requests? This includes pending ones. Users will need to request again.`,
->>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
+                ? `This will remove ALL ${totalCount} requests, including ${pendingCount} still pending. Users will need to request again.`
+                : `Remove all ${totalCount} processed requests from history?`,
             [
                 { text: "Cancel", style: "cancel" },
                 { 
@@ -492,25 +481,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
 
-<<<<<<< HEAD
-            {activeTab === 'Music' && (
-                <View style={styles.filterSection}>
-                    <View style={styles.searchBox}>
-                        <Ionicons name="search-outline" size={16} color="#666" style={styles.searchIcon} />
-                        <TextInput
-                            style={styles.compactSearchInput}
-                            placeholder="Search music..."
-                            placeholderTextColor="#666"
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                        />
-                        {searchQuery.length > 0 && (
-                            <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                <Ionicons name="close-circle" size={16} color="#666" />
-                            </TouchableOpacity>
-                        )}
-                    </View>
-=======
             {loading ? (
                 <View style={styles.list}>
                     {activeTab === 'Music' ? (
@@ -533,22 +503,41 @@ const AdminDashboardScreen = ({ navigation }) => {
                     )}
                 </View>
             ) : (
-                <View style={{ flex: 1 }}>
-                    {activeTab === 'Requests' && requests.length > 0 && (
-                        <TouchableOpacity style={styles.clearHistoryBar} onPress={handleClearHistory}>
-                            <Ionicons name="trash-bin-outline" size={16} color="#aaa" />
-                            <Text style={styles.clearHistoryText}>Clear All History</Text>
-                        </TouchableOpacity>
+                <View style={{ flexGrow: 0 }}>
+                    {activeTab === 'Music' ? (
+                        <View style={styles.filterSection}>
+                            <View style={styles.searchBox}>
+                                <Ionicons name="search-outline" size={16} color="#666" style={styles.searchIcon} />
+                                <TextInput
+                                    style={styles.compactSearchInput}
+                                    placeholder="Search music..."
+                                    placeholderTextColor="#666"
+                                    value={searchQuery}
+                                    onChangeText={setSearchQuery}
+                                />
+                                {searchQuery.length > 0 && (
+                                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                        <Ionicons name="close-circle" size={16} color="#666" />
+                                    </TouchableOpacity>
+                                )}
+                            </View>
+                            <FlatList
+                                data={genres}
+                                keyExtractor={(item) => item}
+                                renderItem={renderGenreItem}
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                contentContainerStyle={styles.compactGenreList}
+                            />
+                        </View>
+                    ) : (
+                        requests.length > 0 && (
+                            <TouchableOpacity style={styles.clearHistoryBar} onPress={handleClearHistory}>
+                                <Ionicons name="trash-bin-outline" size={16} color="#aaa" />
+                                <Text style={styles.clearHistoryText}>Clear All History</Text>
+                            </TouchableOpacity>
+                        )
                     )}
->>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
-                    <FlatList
-                        data={genres}
-                        keyExtractor={(item) => item}
-                        renderItem={renderGenreItem}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={styles.compactGenreList}
-                    />
                 </View>
             )}
 
