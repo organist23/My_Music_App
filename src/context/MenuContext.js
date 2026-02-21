@@ -115,12 +115,15 @@ export const MenuProvider = ({ children }) => {
                     'Some items could not be deleted. Check RLS Policies.\n\nStuck Items:\n' + errors.join('\n'),
                     [{ text: 'OK' }]
                 );
+                return false;
             } else {
                 Alert.alert('Success', 'Total project reset complete. All music and data have been wiped.');
+                return true;
             }
         } catch (error) {
             setFormatProgress(null);
             Alert.alert('Fatal Format Error', error.message);
+            return false;
         }
     };
 

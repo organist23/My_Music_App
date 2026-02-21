@@ -3,13 +3,14 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useMenu } from '../../context/MenuContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../supabaseClient';
 import { downloadMusicFile, saveToSAF } from '../../services/DownloadService';
 import * as FileSystem from 'expo-file-system/legacy';
 const { StorageAccessFramework } = FileSystem;
 import { Platform } from 'react-native';
 
-const SettingsMaintenanceScreen = () => {
+const SettingsMaintenanceScreen = ({ navigation }) => {
     const { profile } = useAuth();
     const { 
         storageUsage, 
@@ -18,6 +19,7 @@ const SettingsMaintenanceScreen = () => {
         formatSystem,
         formatProgress 
     } = useMenu();
+    const insets = useSafeAreaInsets();
 
     const [backupProgress, setBackupProgress] = useState(null); // { current, total, name }
 
@@ -103,7 +105,12 @@ const SettingsMaintenanceScreen = () => {
                                 { 
                                     text: "WIPE EVERYTHING", 
                                     style: "destructive",
-                                    onPress: () => formatSystem()
+                                    onPress: async () => {
+                                        const success = await formatSystem();
+                                        if (success) {
+                                            navigation.navigate('AdminDashboard');
+                                        }
+                                    }
                                 }
                             ]
                         );
@@ -146,6 +153,8 @@ const SettingsMaintenanceScreen = () => {
                 </View>
             )}
 
+            <View style={{ height: insets.top + 10 }} />
+
             <Text style={styles.sectionTitle}>System Maintenance</Text>
             
             <TouchableOpacity style={styles.actionButton} onPress={handleBackupAll}>
@@ -171,7 +180,6 @@ const SettingsMaintenanceScreen = () => {
             </TouchableOpacity>
 
             <View style={styles.footer}>
-                <Text style={styles.footerText}>Version 1.0.0</Text>
                 <Text style={styles.footerText}>Supabase Free Tier (Lifetime Storage Management)</Text>
             </View>
         </ScrollView>

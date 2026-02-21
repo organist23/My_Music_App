@@ -30,11 +30,29 @@ const HomeScreen = ({ navigation }) => {
             if (Platform.OS === 'android') {
                 NavigationBar.setButtonStyleAsync('light');
             }
+            // Sync data whenever screen comes into focus
+            fetchData();
         }, [])
     );
 
     useEffect(() => {
         fetchData();
+
+        // Real-time subscription for music deletions/updates
+        const musicSubscription = supabase
+            .channel('home_music_sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'music' },
+                () => {
+                    fetchData();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(musicSubscription);
+        };
     }, []);
 
     const fetchData = async () => {
@@ -138,7 +156,7 @@ const HomeScreen = ({ navigation }) => {
                     <Image source={{ uri: item.cover_url }} style={styles.cardCover} resizeMode="cover" />
                     
                     {/* Overlay Info Container */}
-                    <View style={styles.cardOverlay}>
+                    <View style={[styles.cardOverlay, isCurrent && styles.activeCardOverlay]}>
                         <View style={styles.cardInfo}>
                             {currentTrack?.id === item.id && (
                                 <View style={styles.visualizerContainer}>
@@ -401,11 +419,14 @@ const styles = StyleSheet.create({
     activeCard: {
         borderColor: '#1DB954',
         borderWidth: 2,
-        elevation: 15,
+        elevation: 18,
         shadowColor: '#1DB954',
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
+        shadowOpacity: 0.6,
+        shadowRadius: 15,
         zIndex: 2,
+    },
+    activeCardOverlay: {
+        backgroundColor: 'rgba(0,0,0,0.85)',
     },
     inactiveCard: {
         opacity: 0.6,

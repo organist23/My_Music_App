@@ -187,6 +187,10 @@ const styles = StyleSheet.create({
         borderColor: '#1DB954',
         borderWidth: 2,
         backgroundColor: '#222',
+        elevation: 10,
+        shadowColor: '#1DB954',
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
     },
     inactiveCard: {
         opacity: 0.6,

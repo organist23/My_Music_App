@@ -56,6 +56,8 @@ const AdminDashboardScreen = ({ navigation }) => {
             if (Platform.OS === 'android') {
                 NavigationBar.setButtonStyleAsync('light');
             }
+            // Always refresh when focused to catch any bulk changes from settings
+            fetchData();
         }, [])
     );
 
@@ -356,7 +358,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                     <Image source={{ uri: item.cover_url }} style={styles.trackCover} resizeMode="cover" />
                     
                     {/* Overlay Info Container */}
-                    <View style={styles.cardOverlay}>
+                    <View style={[styles.cardOverlay, isCurrent && styles.activeCardOverlay]}>
                         <View style={styles.cardInfo}>
                             {currentTrack?.id === item.id && (
                                 <View style={styles.visualizerContainer}>
@@ -813,11 +815,14 @@ const styles = StyleSheet.create({
     activeCard: {
         borderColor: '#1DB954',
         borderWidth: 2,
-        elevation: 15,
+        elevation: 18,
         shadowColor: '#1DB954',
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
+        shadowOpacity: 0.6,
+        shadowRadius: 15,
         zIndex: 2,
+    },
+    activeCardOverlay: {
+        backgroundColor: 'rgba(0,0,0,0.85)',
     },
     inactiveCard: {
         opacity: 0.6,
@@ -1052,8 +1057,8 @@ const styles = StyleSheet.create({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        marginTop: 100,
         paddingHorizontal: 40,
+        minHeight: 300, // Ensure there's enough height to show it's centered
     },
     emptyText: {
         color: '#fff',

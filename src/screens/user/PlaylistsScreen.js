@@ -707,6 +707,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#282828',
         borderColor: '#1DB954',
         borderWidth: 1,
+        elevation: 8,
+        shadowColor: '#1DB954',
+        shadowOpacity: 0.2,
+        shadowRadius: 5,
     },
     activeSongText: {
         color: '#1DB954',
