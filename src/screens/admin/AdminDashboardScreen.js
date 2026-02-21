@@ -178,12 +178,21 @@ const AdminDashboardScreen = ({ navigation }) => {
     const handleRequestAction = async (requestId, status, userId, musicId) => {
         try {
             if (status === 'rejected') {
+                // Remove request
                 const { error: delError } = await supabase
                     .from('music_requests')
                     .delete()
                     .eq('id', requestId);
                 
                 if (delError) throw delError;
+
+                // Also revoke download permission if it exists
+                await supabase
+                    .from('download_permissions')
+                    .delete()
+                    .eq('user_id', userId)
+                    .eq('music_id', musicId);
+                
                 Alert.alert('Success', 'Request rejected and removed.');
             } else {
                 // Update request status (for approved)
@@ -230,9 +239,14 @@ const AdminDashboardScreen = ({ navigation }) => {
     };
 
     const handleClearHistory = async () => {
+<<<<<<< HEAD
         const totalCount = requests.length;
         if (totalCount === 0) {
             Alert.alert("Clean Dashboard", "There are no requests to clear!");
+=======
+        if (requests.length === 0) {
+            Alert.alert("Clean Dashboard", "There is no history to clear yet!");
+>>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
             return;
         }
 
@@ -240,16 +254,22 @@ const AdminDashboardScreen = ({ navigation }) => {
         const processedCount = totalCount - pendingCount;
 
         Alert.alert(
+<<<<<<< HEAD
             "Force Clear History",
             pendingCount > 0 
                 ? `Are you sure? This will remove ALL ${totalCount} requests, including ${pendingCount} still pending.`
                 : `Remove all ${processedCount} processed requests from history?`,
+=======
+            "Clear All History",
+            `Are you sure you want to permanently remove all ${requests.length} requests? This includes pending ones. Users will need to request again.`,
+>>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
             [
                 { text: "Cancel", style: "cancel" },
                 { 
                     text: "Force Clear All", 
                     style: "destructive", 
                     onPress: async () => {
+<<<<<<< HEAD
                         try {
                             // Delete all requests for this admin's view
                             const { error } = await supabase
@@ -263,6 +283,29 @@ const AdminDashboardScreen = ({ navigation }) => {
                             fetchRequests();
                         } catch (error) {
                             Alert.alert('Error', error.message);
+=======
+                        // 1. Delete all requests
+                        const { error: reqError } = await supabase
+                            .from('music_requests')
+                            .delete()
+                            .neq('id', '00000000-0000-0000-0000-000000000000');
+                        
+                        if (reqError) {
+                            Alert.alert('Error clearing requests', reqError.message);
+                            return;
+                        }
+
+                        // 2. Delete all download permissions
+                        const { error: permError } = await supabase
+                            .from('download_permissions')
+                            .delete()
+                            .neq('id', '00000000-0000-0000-0000-000000000000');
+                        
+                        if (permError) {
+                            Alert.alert('Error clearing permissions', permError.message);
+                        } else {
+                            fetchRequests();
+>>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
                         }
                     } 
                 }
@@ -449,6 +492,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                 </TouchableOpacity>
             </View>
 
+<<<<<<< HEAD
             {activeTab === 'Music' && (
                 <View style={styles.filterSection}>
                     <View style={styles.searchBox}>
@@ -466,6 +510,37 @@ const AdminDashboardScreen = ({ navigation }) => {
                             </TouchableOpacity>
                         )}
                     </View>
+=======
+            {loading ? (
+                <View style={styles.list}>
+                    {activeTab === 'Music' ? (
+                        <>
+                            <View style={styles.row}>
+                                <SkeletonCard />
+                                <SkeletonCard />
+                            </View>
+                            <View style={styles.row}>
+                                <SkeletonCard />
+                                <SkeletonCard />
+                            </View>
+                        </>
+                    ) : (
+                        <View style={{ paddingHorizontal: 15 }}>
+                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
+                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
+                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
+                        </View>
+                    )}
+                </View>
+            ) : (
+                <View style={{ flex: 1 }}>
+                    {activeTab === 'Requests' && requests.length > 0 && (
+                        <TouchableOpacity style={styles.clearHistoryBar} onPress={handleClearHistory}>
+                            <Ionicons name="trash-bin-outline" size={16} color="#aaa" />
+                            <Text style={styles.clearHistoryText}>Clear All History</Text>
+                        </TouchableOpacity>
+                    )}
+>>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
                     <FlatList
                         data={genres}
                         keyExtractor={(item) => item}

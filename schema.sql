@@ -130,3 +130,72 @@ CREATE POLICY "Users can remove songs from their own playlists." ON playlist_son
       WHERE id = playlist_id AND user_id = auth.uid()
     )
   );
+
+-- Music Requests Table
+CREATE TABLE music_requests (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  music_id UUID REFERENCES music(id) ON DELETE CASCADE NOT NULL,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+ALTER TABLE music_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own requests." ON music_requests
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own requests." ON music_requests
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own requests." ON music_requests
+  FOR DELETE USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own requests." ON music_requests
+  FOR UPDATE USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can view all requests." ON music_requests
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can update requests." ON music_requests
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+CREATE POLICY "Admins can delete requests." ON music_requests
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
+
+-- Download Permissions Table
+CREATE TABLE download_permissions (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  user_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  music_id UUID REFERENCES music(id) ON DELETE CASCADE NOT NULL,
+  granted_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,
+  UNIQUE(user_id, music_id)
+);
+
+ALTER TABLE download_permissions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view their own permissions." ON download_permissions
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Admins can manage all permissions." ON download_permissions
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE id = auth.uid() AND role = 'admin'
+    )
+  );
