@@ -223,31 +223,6 @@ const MusicPlayerScreen = ({ navigation }) => {
                 .from('music_requests')
                 .delete()
                 .eq('user_id', user.id)
-                .eq('music_id', currentTrack.id);
-
-            if (error) throw error;
-            
-<<<<<<< HEAD
-            setRequestStatus('pending');
-=======
-            setRequestStatus('none');
->>>>>>> 1ab4f9d88c3131e04a3e5bf33944078901a8c434
-        } catch (error) {
-            Alert.alert('Error', error.message);
-        } finally {
-            setCheckingStatus(false);
-        }
-    };
-
-    const handleUndoRequest = async () => {
-        if (!user || !currentTrack) return;
-
-        try {
-            setCheckingStatus(true);
-            const { error } = await supabase
-                .from('music_requests')
-                .delete()
-                .eq('user_id', user.id)
                 .eq('music_id', currentTrack.id)
                 .eq('status', 'pending');
 
