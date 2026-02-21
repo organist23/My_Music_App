@@ -1,5 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, Platform, RefreshControl, TextInput } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, Platform, RefreshControl, TextInput, LayoutAnimation, UIManager } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../supabaseClient';
@@ -10,6 +9,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import SkeletonCard from '../../components/SkeletonCard';
 import PlayingVisualizer from '../../components/PlayingVisualizer';
+
+// Enable LayoutAnimation for Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+    UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const AdminDashboardScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
@@ -35,21 +39,33 @@ const AdminDashboardScreen = ({ navigation }) => {
     useEffect(() => {
         fetchData();
 
+        // Set up real-time subscription for music deletion/updates
+        const musicSubscription = supabase
+            .channel('admin_music_sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'music' },
+                () => {
+                    fetchMusic(true); // pass true to indicate we want animation
+                }
+            )
+            .subscribe();
+
         // Set up real-time subscription for requests
-        const subscription = supabase
+        const requestSubscription = supabase
             .channel('admin_requests_sync')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'music_requests' },
                 () => {
-                    // Refresh requests on any change (insert, update, delete)
                     fetchRequests();
                 }
             )
             .subscribe();
 
         return () => {
-            supabase.removeChannel(subscription);
+            supabase.removeChannel(musicSubscription);
+            supabase.removeChannel(requestSubscription);
         };
     }, []);
 
@@ -75,7 +91,7 @@ const AdminDashboardScreen = ({ navigation }) => {
         fetchData();
     }, [activeTab]);
 
-    const fetchMusic = async () => {
+    const fetchMusic = async (withAnimation = false) => {
         try {
             const { data, error } = await supabase
                 .from('music')
@@ -83,12 +99,19 @@ const AdminDashboardScreen = ({ navigation }) => {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
+            
+            if (withAnimation) {
+                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+            }
+            
             setMusic(data || []);
             
             const uniqueGenres = ['All', ...new Set((data || []).map(item => item.genre))];
             setGenres(uniqueGenres);
         } catch (error) {
-            Alert.alert('Error', error.message);
+            if (!withAnimation) { // Don't show alert for background sync failures unless it's initial load
+                Alert.alert('Error', error.message);
+            }
         }
     };
 
@@ -131,11 +154,12 @@ const AdminDashboardScreen = ({ navigation }) => {
             `Are you sure you want to permanently delete "${title}" and its storage files?`,
             [
                 { text: "Cancel", style: "cancel" },
-                { 
-                    text: "Delete", 
-                    style: "destructive", 
                     onPress: async () => {
                         try {
+                            // Optimistic UI update with animation
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setMusic(prev => prev.filter(m => m.id !== id));
+
                             // 1. Fetch track details to get file paths BEFORE deleting from DB
                             const { data: track, error: fetchErr } = await supabase
                                 .from('music')
@@ -147,11 +171,15 @@ const AdminDashboardScreen = ({ navigation }) => {
 
                             // 2. Delete from DB
                             const { error: dbError } = await supabase.from('music').delete().eq('id', id);
-                            if (dbError) throw dbError;
+                            if (dbError) {
+                                // Revert optimistic update on error
+                                fetchMusic();
+                                throw dbError;
+                            }
 
                             // 3. Delete from Storage
+                            // ... (rest of storage logic remains the same)
                             if (track) {
-                                // Extract filenames from URLs (assuming standard Supabase public URL structure)
                                 const audioFile = track.audio_url?.split('/').pop();
                                 const coverFile = track.cover_url?.split('/').pop();
 
@@ -163,14 +191,14 @@ const AdminDashboardScreen = ({ navigation }) => {
                                 }
                             }
 
-                            Alert.alert('Success', `"${title}" and its files have been removed.`);
+                            // Alert.alert('Success', `"${title}" and its files have been removed.`); // Optional: remove alert for smoother feel
                             await refreshStorageUsage();
-                            fetchMusic();
+                            // fetchMusic(); // No need to fetch, optimistic UI handled it
                         } catch (error) {
                             Alert.alert('Error', error.message);
+                            fetchMusic(); // Re-sync on error
                         }
                     } 
-                }
             ]
         );
     };
