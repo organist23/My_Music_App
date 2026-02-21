@@ -68,9 +68,13 @@ const UserTabs = () => {
             tabBarStyle: { 
                 backgroundColor: '#121212', 
                 borderTopColor: '#333',
-                paddingTop: 5,
-                height: 60 + insets.bottom,
-                paddingBottom: insets.bottom > 0 ? insets.bottom - 5 : 10,
+                paddingTop: 4,
+                height: 50 + insets.bottom,
+                paddingBottom: insets.bottom > 0 ? insets.bottom - 2 : 6,
+            },
+            tabBarLabelStyle: {
+                fontSize: 10,
+                fontWeight: '500',
             },
             tabBarActiveTintColor: '#1DB954',
             tabBarInactiveTintColor: '#aaa',
@@ -85,7 +89,7 @@ const UserTabs = () => {
                     iconName = focused ? 'list' : 'list-outline';
                 }
 
-                return <Ionicons name={iconName} size={size} color={color} />;
+                return <Ionicons name={iconName} size={20} color={color} />;
             },
         })}>
             <Tab.Screen 

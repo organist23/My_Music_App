@@ -1,16 +1,18 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 
 const PlayerContext = createContext({});
 
 export const PlayerProvider = ({ children }) => {
     const [sound, setSound] = useState(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [isBuffering, setIsBuffering] = useState(false);
     const [currentTrack, setCurrentTrack] = useState(null);
     const [position, setPosition] = useState(0);
     const [duration, setDuration] = useState(0);
 
     const [queue, setQueue] = useState([]);
+    const [shuffledQueue, setShuffledQueue] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(-1);
     const [isShuffle, setIsShuffle] = useState(false);
     const [repeatMode, setRepeatMode] = useState('all'); // 'none', 'all', 'one'
@@ -20,28 +22,78 @@ export const PlayerProvider = ({ children }) => {
 
     // Refs to avoid stale closures in onPlaybackStatusUpdate
     const queueRef = useRef(queue);
+    const shuffledQueueRef = useRef(shuffledQueue);
     const currentIndexRef = useRef(currentIndex);
     const isShuffleRef = useRef(isShuffle);
     const repeatModeRef = useRef(repeatMode);
     const currentTrackRef = useRef(currentTrack);
     const isLoadingRef = useRef(false);
+    const retryTimeoutRef = useRef(null);
+    const stallTimeoutRef = useRef(null);
 
     useEffect(() => {
         queueRef.current = queue;
+        shuffledQueueRef.current = shuffledQueue;
         currentIndexRef.current = currentIndex;
         isShuffleRef.current = isShuffle;
         repeatModeRef.current = repeatMode;
         currentTrackRef.current = currentTrack;
-    }, [queue, currentIndex, isShuffle, repeatMode, currentTrack]);
+    }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack]);
 
-    // Unified cleanup for sound change/unmount
+    // Initial Audio mode setup
+    useEffect(() => {
+        const setupAudio = async () => {
+            try {
+                await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,
+                    staysActiveInBackground: true,
+                    interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+                    playsInSilentModeIOS: true,
+                    shouldDuckAndroid: true,
+                    interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+                    playThroughEarpieceAndroid: false,
+                });
+            } catch (e) {
+                console.error('Error setting audio mode:', e);
+            }
+        };
+        setupAudio();
+    }, []);
+
+    // Cleanup effect
     useEffect(() => {
         return () => {
+            if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+            if (stallTimeoutRef.current) clearTimeout(stallTimeoutRef.current);
             if (sound) {
                 sound.unloadAsync().catch(() => {});
             }
         };
     }, [sound]);
+
+    const shuffleArray = (array) => {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
+    };
+
+    const updateQueue = (newQueue) => {
+        setQueue(newQueue);
+        queueRef.current = newQueue;
+    };
+
+    const updateShuffledQueue = (newShuffled) => {
+        setShuffledQueue(newShuffled);
+        shuffledQueueRef.current = newShuffled;
+    };
+
+    const updateCurrentIndex = (index) => {
+        setCurrentIndex(index);
+        currentIndexRef.current = index;
+    };
 
     const toggleRepeat = async () => {
         const modes = ['none', 'all', 'one'];
@@ -54,85 +106,99 @@ export const PlayerProvider = ({ children }) => {
     };
 
     const toggleShuffle = () => {
-        setIsShuffle(!isShuffle);
+        const nextShuffle = !isShuffle;
+        setIsShuffle(nextShuffle);
+        isShuffleRef.current = nextShuffle;
+        
+        if (nextShuffle) {
+            // Spotify Logic: Keep current track, shuffle the rest
+            if (queueRef.current.length > 0) {
+                const track = currentTrackRef.current;
+                const remaining = queueRef.current.filter(t => t.id !== track?.id);
+                const shuffled = track ? [track, ...shuffleArray(remaining)] : shuffleArray(queueRef.current);
+                updateShuffledQueue(shuffled);
+                updateCurrentIndex(0); // Current track is at 0
+            }
+        } else {
+            // Spotify Logic: Restore original order
+            const index = queueRef.current.findIndex(t => t.id === currentTrackRef.current?.id);
+            if (index !== -1) updateCurrentIndex(index);
+        }
     };
 
     const playTrack = async (track, newQueue = [], context = null) => {
         if (!track) return;
 
-        // 1. Update context if provided
-        if (context) {
-            setPlayingFrom(context);
-        } else if (newQueue.length > 0) {
-           // Default fallback if no explicit context but new queue
-           setPlayingFrom({ type: 'unknown' });
-        }
+        if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+        if (stallTimeoutRef.current) clearTimeout(stallTimeoutRef.current);
 
-        // 1. Update queue/index IMMEDIATELY (both state and refs)
-        // This is critical for contextual playback ("staying in the playlist")
-        let actualQueue = queueRef.current;
+        if (context) setPlayingFrom(context);
+
         if (newQueue.length > 0) {
-            setQueue(newQueue);
-            queueRef.current = newQueue;
-            actualQueue = newQueue;
-        }
-        
-        const index = actualQueue.findIndex(t => t.id === track.id);
-        if (index !== -1) {
-            setCurrentIndex(index);
-            currentIndexRef.current = index;
-        }
-
-        // 2. If same track is already loaded/loading, just play it if paused
-        // But we skip this if we just updated to a NEW queue context
-        const isSameContext = playingFrom?.type === context?.type && playingFrom?.id === context?.id;
-        
-        if (currentTrackRef.current?.id === track.id && sound && isSameContext) {
-            if (!isPlaying) {
-                await sound.playAsync();
+            updateQueue(newQueue);
+            if (isShuffleRef.current) {
+                const remaining = newQueue.filter(t => t.id !== track.id);
+                const shuffled = [track, ...shuffleArray(remaining)];
+                updateShuffledQueue(shuffled);
             }
+        }
+        
+        const sourceQueue = isShuffleRef.current ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : queueRef.current) : queueRef.current;
+        const index = sourceQueue.findIndex(t => t.id === track.id);
+        if (index !== -1) updateCurrentIndex(index);
+
+        const isSameTrack = currentTrackRef.current?.id === track.id;
+        const isContextMatch = !context || (playingFrom?.type === context?.type && playingFrom?.id === context?.id);
+        
+        if (isSameTrack && sound && isContextMatch) {
+            try {
+                const status = await sound.getStatusAsync();
+                if (status.isLoaded && !status.isPlaying) await sound.playAsync();
+            } catch (e) {}
             return;
         }
 
-        // 3. Prevent redundant loads of the SAME track if currently loading
-        if (isLoadingRef.current && currentTrackRef.current?.id === track.id && newQueue.length === 0) {
-            return;
-        }
+        if (isLoadingRef.current && isSameTrack && newQueue.length === 0) return;
 
         try {
             setIsLoading(true);
             setLoadingTrackId(track.id);
             isLoadingRef.current = true;
-
-            // 4. Update UI state
+            setIsBuffering(true);
             setCurrentTrack(track);
             currentTrackRef.current = track;
 
-            // 5. Clean up previous sound
             if (sound) {
-                try {
-                    // Try to stop and unload immediately, but don't block too long or hang
-                    await sound.unloadAsync().catch(() => {});
-                } catch (e) {
-                    // Silent fail for cleanup
-                }
+                await sound.unloadAsync().catch(() => {});
                 setSound(null);
             }
 
-            // 6. Create and play new sound
             const { sound: newSound } = await Audio.Sound.createAsync(
                 { uri: track.audio_url },
                 { 
                     shouldPlay: true, 
-                    isLooping: repeatModeRef.current === 'one' 
+                    isLooping: repeatModeRef.current === 'one',
+                    progressUpdateIntervalMillis: 500
                 },
                 onPlaybackStatusUpdate
             );
 
             setSound(newSound);
             setIsPlaying(true);
+            setIsBuffering(false);
+            
+            // Stall detector: if stuck in loading/buffering for 10s, force skip
+            stallTimeoutRef.current = setTimeout(() => {
+                if (isLoadingRef.current || isBuffering) {
+                    console.warn('Playback stalled for 10s, skipping...');
+                    playNext();
+                }
+            }, 10000);
+
         } catch (error) {
             console.error('Error in playTrack:', error);
+            setIsBuffering(false);
+            retryTimeoutRef.current = setTimeout(() => playNext(), 2000);
         } finally {
             isLoadingRef.current = false;
             setIsLoading(false);
@@ -141,84 +207,91 @@ export const PlayerProvider = ({ children }) => {
     };
 
     const playNext = async () => {
-        const currentQueue = queueRef.current;
-        if (currentQueue.length === 0) return;
+        const sourceQueue = isShuffleRef.current ? shuffledQueueRef.current : queueRef.current;
+        if (sourceQueue.length === 0) return;
         
-        let nextIndex;
-        if (isShuffleRef.current && currentQueue.length > 1) {
-            let newIndex = currentIndexRef.current;
-            while (newIndex === currentIndexRef.current) {
-                newIndex = Math.floor(Math.random() * currentQueue.length);
+        const isLast = currentIndexRef.current === sourceQueue.length - 1;
+        if (isLast) {
+            if (repeatModeRef.current === 'none') {
+                setIsPlaying(false);
+                return;
             }
-            nextIndex = newIndex;
-        } else {
-            const isLast = currentIndexRef.current === currentQueue.length - 1;
-            if (isLast && repeatModeRef.current === 'none') {
-                return; // Stop at end if repeat is off
+            if (isShuffleRef.current) {
+                const reshuffled = shuffleArray(queueRef.current);
+                updateShuffledQueue(reshuffled);
+                await playTrack(reshuffled[0]);
+                return;
             }
-            nextIndex = (currentIndexRef.current + 1) % currentQueue.length;
         }
-        
-        const nextTrack = currentQueue[nextIndex];
-        await playTrack(nextTrack);
+
+        const nextIndex = (currentIndexRef.current + 1) % sourceQueue.length;
+        await playTrack(sourceQueue[nextIndex]);
     };
 
     const playPrev = async () => {
-        const currentQueue = queueRef.current;
-        if (currentQueue.length === 0) return;
+        const sourceQueue = isShuffleRef.current ? shuffledQueueRef.current : queueRef.current;
+        if (sourceQueue.length === 0) return;
         
-        let prevIndex = (currentIndexRef.current - 1 + currentQueue.length) % currentQueue.length;
-        const prevTrack = currentQueue[prevIndex];
-        await playTrack(prevTrack);
+        const prevIndex = (currentIndexRef.current - 1 + sourceQueue.length) % sourceQueue.length;
+        await playTrack(sourceQueue[prevIndex]);
     };
 
     const onPlaybackStatusUpdate = (status) => {
-        if (status.isLoaded) {
-            setPosition(status.positionMillis);
-            setDuration(status.durationMillis);
-            setIsPlaying(status.isPlaying);
-            
-            if (status.didJustFinish && !status.isLooping) {
+        if (!status || !status.isLoaded) {
+            if (status?.error) {
+                console.error('Playback monitor error:', status.error);
                 playNext();
             }
+            return;
         }
+
+        // Clear stall timeout if we are making progress
+        if (status.isPlaying && !status.isBuffering) {
+            if (stallTimeoutRef.current) {
+                clearTimeout(stallTimeoutRef.current);
+                stallTimeoutRef.current = null;
+            }
+        }
+
+        setPosition(status.positionMillis);
+        setDuration(status.durationMillis);
+        if (!status.isBuffering) setIsPlaying(status.isPlaying);
+        setIsBuffering(status.isBuffering);
+        
+        if (status.didJustFinish && !status.isLooping) playNext();
     };
 
     const togglePlayPause = async () => {
         if (!sound) return;
-
-        if (isPlaying) {
-            await sound.pauseAsync();
-        } else {
-            await sound.playAsync();
+        try {
+            const status = await sound.getStatusAsync();
+            if (status.isLoaded) {
+                if (status.isPlaying) {
+                    await sound.pauseAsync();
+                    setIsPlaying(false);
+                } else {
+                    await sound.playAsync();
+                    setIsPlaying(true);
+                }
+            }
+        } catch (e) {
+            console.error('Toggle play/pause error:', e);
         }
     };
 
     const seek = async (value) => {
         if (!sound) return;
-        await sound.setPositionAsync(value);
+        try {
+            await sound.setPositionAsync(value);
+        } catch (e) {}
     };
 
     return (
         <PlayerContext.Provider value={{
-            currentTrack,
-            isPlaying,
-            position,
-            duration,
-            repeatMode,
-            isShuffle,
-            toggleRepeat,
-            toggleShuffle,
-            playNext,
-            playPrev,
-            playTrack,
-            togglePlayPause,
-            seek,
-            queue,
-            currentIndex,
-            playingFrom,
-            loadingTrackId,
-            isLoading
+            currentTrack, isPlaying, isBuffering, position, duration,
+            repeatMode, isShuffle, toggleRepeat, toggleShuffle,
+            playNext, playPrev, playTrack, togglePlayPause, seek,
+            queue, currentIndex, playingFrom, loadingTrackId, isLoading
         }}>
             {children}
         </PlayerContext.Provider>

@@ -140,7 +140,31 @@ const HomeScreen = ({ navigation }) => {
                 onPress={() => handleCardPress(item)}
             >
                 <View style={styles.imageContainer}>
-                    <Image source={{ uri: item.cover_url }} style={styles.cardCover} />
+                    <Image source={{ uri: item.cover_url }} style={styles.cardCover} resizeMode="cover" />
+                    
+                    {/* Overlay Info Container */}
+                    <View style={styles.cardOverlay}>
+                        <View style={styles.cardInfo}>
+                            <Text 
+                                style={[styles.musicTitle, currentTrack?.id === item.id && { color: '#1DB954' }]} 
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.7}
+                            >
+                                {item.title}
+                            </Text>
+                            <Text style={styles.musicArtist} numberOfLines={1}>{item.artist}</Text>
+                            <View style={styles.metaInfo}>
+                                <View style={styles.metaTop}>
+                                    <View style={styles.genreBadge}>
+                                        <Text style={styles.musicGenre}>{item.genre}</Text>
+                                    </View>
+                                    <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+
                     {currentTrack?.id === item.id && (
                         <View style={styles.visualizerOverlay}>
                             <PlayingVisualizer isPlaying={isPlaying} />
@@ -177,18 +201,6 @@ const HomeScreen = ({ navigation }) => {
                             />
                         )}
                     </TouchableOpacity>
-                </View>
-                <View style={styles.cardInfo}>
-                    <Text style={[styles.musicTitle, currentTrack?.id === item.id && { color: '#1DB954' }]} numberOfLines={1}>{item.title}</Text>
-                    <Text style={styles.musicArtist}>{item.artist}</Text>
-                    <View style={styles.metaInfo}>
-                        <View style={styles.metaTop}>
-                            <View style={styles.genreBadge}>
-                                <Text style={styles.musicGenre}>{item.genre}</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
-                    </View>
                 </View>
             </TouchableOpacity>
         );
@@ -282,12 +294,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
     },
     header: {
-        marginBottom: 20,
+        marginBottom: 12,
     },
     exploreCard: {
         backgroundColor: '#1E1E1E',
-        borderRadius: 20,
-        padding: 20,
+        borderRadius: 12,
+        padding: 10,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -295,27 +307,27 @@ const styles = StyleSheet.create({
         borderColor: '#333',
         elevation: 8,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.4,
-        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
     },
     menuButton: {
         position: 'absolute',
-        left: 15,
-        width: 44,
-        height: 44,
+        left: 10,
+        width: 36,
+        height: 36,
         backgroundColor: '#282828',
-        borderRadius: 22,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 10,
     },
     headerLogo: {
         position: 'absolute',
-        right: 15,
-        width: 44,
-        height: 44,
-        borderRadius: 22,
+        right: 10,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
         borderWidth: 1.5,
         borderColor: '#1DB954',
     },
@@ -323,7 +335,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '900',
         color: '#fff',
         letterSpacing: 1,
@@ -331,7 +343,7 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     subtitle: {
-        fontSize: 13,
+        fontSize: 11,
         fontWeight: '600',
         color: '#1DB954',
         marginTop: 2,
@@ -344,10 +356,10 @@ const styles = StyleSheet.create({
     searchInput: {
         backgroundColor: '#1E1E1E',
         color: '#fff',
-        paddingHorizontal: 20,
-        paddingVertical: 12,
-        borderRadius: 25,
-        fontSize: 15,
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        borderRadius: 20,
+        fontSize: 13,
         borderWidth: 1,
         borderColor: '#333',
     },
@@ -412,10 +424,19 @@ const styles = StyleSheet.create({
     },
     imageContainer: {
         width: '100%',
-        height: 160,
+        height: 180,
         backgroundColor: '#333',
         position: 'relative',
         overflow: 'hidden',
+    },
+    cardOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingTop: 8,
+        paddingBottom: 10,
+        paddingHorizontal: 12,
     },
     cardCover: {
         width: '100%',
@@ -423,7 +444,7 @@ const styles = StyleSheet.create({
     },
     playOverlay: {
         position: 'absolute',
-        bottom: 10,
+        top: 60,
         right: 10,
         width: 36,
         height: 36,
@@ -440,9 +461,10 @@ const styles = StyleSheet.create({
     },
     visualizerOverlay: {
         position: 'absolute',
-        bottom: 10,
-        left: 10,
-        zIndex: 10,
+        top: 20,
+        left: '50%',
+        transform: [{ translateX: -15 }],
+        zIndex: 5,
     },
     playIcon: {
         color: '#000',
@@ -450,17 +472,34 @@ const styles = StyleSheet.create({
         marginLeft: 2,
     },
     cardInfo: {
-        padding: 12,
+        padding: 6,
     },
     musicTitle: {
         color: '#fff',
-        fontSize: 15,
+        fontSize: 17,
         fontWeight: 'bold',
+        textShadowColor: 'rgba(0,0,0,0.9)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 3,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        alignSelf: 'flex-start',
+        marginBottom: 2,
     },
     musicArtist: {
-        color: '#aaa',
-        fontSize: 13,
+        color: '#fff',
+        fontSize: 12,
         marginTop: 2,
+        textShadowColor: 'rgba(0,0,0,1)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 4,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 3,
+        alignSelf: 'flex-start',
     },
     genreBadge: {
         backgroundColor: '#282828',
@@ -468,10 +507,10 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 4,
-        marginTop: 8,
+        marginTop: 4,
     },
     metaInfo: {
-        marginTop: 8,
+        marginTop: 4,
     },
     metaTop: {
         flexDirection: 'row',
@@ -486,9 +525,13 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     releaseDate: {
-        color: '#666',
+        color: '#fff',
         fontSize: 10,
         fontStyle: 'italic',
+        opacity: 0.8,
+        textShadowColor: 'rgba(0,0,0,0.9)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 3,
     },
     newBadge: {
         position: 'absolute',

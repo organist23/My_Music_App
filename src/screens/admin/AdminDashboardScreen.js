@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, Platform, RefreshControl } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, Platform, RefreshControl, TextInput } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../supabaseClient';
@@ -17,6 +17,9 @@ const AdminDashboardScreen = ({ navigation }) => {
     const { playTrack, currentTrack, isPlaying, togglePlayPause, loadingTrackId } = usePlayer();
     const [activeTab, setActiveTab] = useState('Music'); // 'Music' or 'Requests'
     const [music, setMusic] = useState([]);
+    const [genres, setGenres] = useState(['All']);
+    const [selectedGenre, setSelectedGenre] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -80,7 +83,10 @@ const AdminDashboardScreen = ({ navigation }) => {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setMusic(data);
+            setMusic(data || []);
+            
+            const uniqueGenres = ['All', ...new Set((data || []).map(item => item.genre))];
+            setGenres(uniqueGenres);
         } catch (error) {
             Alert.alert('Error', error.message);
         }
@@ -224,28 +230,40 @@ const AdminDashboardScreen = ({ navigation }) => {
     };
 
     const handleClearHistory = async () => {
-        const processedCount = requests.filter(r => r.status !== 'pending').length;
-        if (processedCount === 0) {
-            Alert.alert("Clean Dashboard", "There is no history to clear yet!");
+        const totalCount = requests.length;
+        if (totalCount === 0) {
+            Alert.alert("Clean Dashboard", "There are no requests to clear!");
             return;
         }
 
+        const pendingCount = requests.filter(r => r.status === 'pending').length;
+        const processedCount = totalCount - pendingCount;
+
         Alert.alert(
-            "Clear History",
-            `Are you sure you want to remove all ${processedCount} processed requests from history? pending requests will remain.`,
+            "Force Clear History",
+            pendingCount > 0 
+                ? `Are you sure? This will remove ALL ${totalCount} requests, including ${pendingCount} still pending.`
+                : `Remove all ${processedCount} processed requests from history?`,
             [
                 { text: "Cancel", style: "cancel" },
                 { 
-                    text: "Clear All", 
+                    text: "Force Clear All", 
                     style: "destructive", 
                     onPress: async () => {
-                        const { error } = await supabase
-                            .from('music_requests')
-                            .delete()
-                            .neq('status', 'pending');
-                        
-                        if (error) Alert.alert('Error', error.message);
-                        else fetchRequests();
+                        try {
+                            // Delete all requests for this admin's view
+                            const { error } = await supabase
+                                .from('music_requests')
+                                .delete()
+                                .neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to delete all
+                            
+                            if (error) throw error;
+                            
+                            Alert.alert('Success', 'All request history cleared.');
+                            fetchRequests();
+                        } catch (error) {
+                            Alert.alert('Error', error.message);
+                        }
                     } 
                 }
             ]
@@ -277,13 +295,45 @@ const AdminDashboardScreen = ({ navigation }) => {
                 ]}
                 onPress={() => handleCardPress(item)}
             >
-                <View style={[styles.thumbnailContainer, { height: 150, overflow: 'hidden' }]}>
-                    <Image source={{ uri: item.cover_url }} style={styles.trackCover} />
+                <View style={[styles.thumbnailContainer, { overflow: 'hidden' }]}>
+                    <Image source={{ uri: item.cover_url }} style={styles.trackCover} resizeMode="cover" />
+                    
+                    {/* Overlay Info Container */}
+                    <View style={styles.cardOverlay}>
+                        <View style={styles.cardInfo}>
+                            <Text 
+                                style={[styles.musicTitle, isCurrent && { color: '#1DB954' }]} 
+                                numberOfLines={1}
+                                adjustsFontSizeToFit
+                                minimumFontScale={0.7}
+                            >
+                                {item.title}
+                            </Text>
+                            <Text style={styles.musicArtist} numberOfLines={1}>{item.artist}</Text>
+                            <View style={styles.cardFooter}>
+                                <View style={styles.footerTop}>
+                                    <View style={styles.genreBadge}>
+                                        <Text style={styles.genreText}>{item.genre}</Text>
+                                    </View>
+                                    <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
+                                </View>
+                            </View>
+                        </View>
+                    </View>
+
                     {currentTrack?.id === item.id && (
                         <View style={styles.visualizerOverlay}>
                             <PlayingVisualizer isPlaying={isPlaying} />
                         </View>
                     )}
+
+                    <TouchableOpacity 
+                        style={styles.deleteAction}
+                        onPress={() => handleDelete(item.id, item.title)}
+                    >
+                        <Ionicons name="trash-outline" size={16} color="#FF4136" />
+                    </TouchableOpacity>
+
                     <TouchableOpacity 
                         style={styles.playOverlay}
                         onPress={() => handleTogglePlay(item)}
@@ -299,26 +349,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                             />
                         )}
                     </TouchableOpacity>
-                </View>
-                <TouchableOpacity 
-                    style={styles.deleteAction}
-                    onPress={() => handleDelete(item.id, item.title)}
-                >
-                    <Ionicons name="trash-outline" size={18} color="#FF4136" />
-                </TouchableOpacity>
-                <View style={styles.cardInfo}>
-                    <Text style={[styles.musicTitle, currentTrack?.id === item.id && { color: '#1DB954' }]} numberOfLines={1}>
-                        {item.title}
-                    </Text>
-                    <Text style={styles.musicArtist} numberOfLines={1}>{item.artist}</Text>
-                    <View style={styles.cardFooter}>
-                        <View style={styles.footerTop}>
-                            <View style={styles.genreBadge}>
-                                <Text style={styles.genreText}>{item.genre}</Text>
-                            </View>
-                        </View>
-                        <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
-                    </View>
                 </View>
             </TouchableOpacity>
         );
@@ -363,9 +393,31 @@ const AdminDashboardScreen = ({ navigation }) => {
         </View>
     );
 
+    const filteredMusic = music.filter(item => {
+        const matchesSearch = item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                             item.artist.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesGenre = selectedGenre === 'All' || item.genre === selectedGenre;
+        return matchesSearch && matchesGenre;
+    });
+
+    const renderGenreItem = ({ item }) => (
+        <TouchableOpacity 
+            style={[
+                styles.genreChip, 
+                selectedGenre === item && styles.activeGenreChip
+            ]}
+            onPress={() => setSelectedGenre(item)}
+        >
+            <Text style={[
+                styles.genreText,
+                selectedGenre === item && styles.activeGenreText
+            ]}>{item}</Text>
+        </TouchableOpacity>
+    );
+
     return (
         <View style={styles.container}>
-            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+            <View style={[styles.header, { paddingTop: insets.top + 10, paddingHorizontal: 15 }]}>
                 <View style={styles.exploreCard}>
                     <TouchableOpacity style={styles.menuButton} onPress={openMenu}>
                         <Ionicons name="menu-outline" size={28} color="#fff" />
@@ -377,12 +429,12 @@ const AdminDashboardScreen = ({ navigation }) => {
                 </View>
             </View>
 
-            <View style={styles.tabBar}>
+            <View style={[styles.tabBar, { paddingHorizontal: 15 }]}>
                 <TouchableOpacity 
                     style={[styles.tab, activeTab === 'Music' && styles.activeTab]}
                     onPress={() => setActiveTab('Music')}
                 >
-                    <Ionicons name="musical-notes-outline" size={20} color={activeTab === 'Music' ? '#1DB954' : '#666'} />
+                    <Ionicons name="musical-notes-outline" size={18} color={activeTab === 'Music' ? '#1DB954' : '#666'} />
                     <Text style={[styles.tabText, activeTab === 'Music' && styles.activeTabText]}>My Music</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
@@ -390,74 +442,119 @@ const AdminDashboardScreen = ({ navigation }) => {
                     onPress={() => setActiveTab('Requests')}
                 >
                     <View>
-                        <Ionicons name="notifications-outline" size={20} color={activeTab === 'Requests' ? '#1DB954' : '#666'} />
+                        <Ionicons name="notifications-outline" size={18} color={activeTab === 'Requests' ? '#1DB954' : '#666'} />
                         {requests.filter(r => r.status === 'pending').length > 0 && <View style={styles.notifDot} />}
                     </View>
                     <Text style={[styles.tabText, activeTab === 'Requests' && styles.activeTabText]}>Requests</Text>
                 </TouchableOpacity>
             </View>
 
-            {loading ? (
-                <View style={styles.list}>
-                    {activeTab === 'Music' ? (
-                        <>
-                            <View style={styles.row}>
-                                <SkeletonCard />
-                                <SkeletonCard />
-                            </View>
-                            <View style={styles.row}>
-                                <SkeletonCard />
-                                <SkeletonCard />
-                            </View>
-                        </>
-                    ) : (
-                        <View style={{ paddingHorizontal: 15 }}>
-                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
-                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
-                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
-                        </View>
-                    )}
-                </View>
-            ) : (
-                <View style={{ flex: 1 }}>
-                    {activeTab === 'Requests' && requests.length > 0 && (
-                        <TouchableOpacity style={styles.clearHistoryBar} onPress={handleClearHistory}>
-                            <Ionicons name="trash-bin-outline" size={16} color="#aaa" />
-                            <Text style={styles.clearHistoryText}>Clear Processed History</Text>
-                        </TouchableOpacity>
-                    )}
+            {activeTab === 'Music' && (
+                <View style={styles.filterSection}>
+                    <View style={styles.searchBox}>
+                        <Ionicons name="search-outline" size={16} color="#666" style={styles.searchIcon} />
+                        <TextInput
+                            style={styles.compactSearchInput}
+                            placeholder="Search music..."
+                            placeholderTextColor="#666"
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                        />
+                        {searchQuery.length > 0 && (
+                            <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                <Ionicons name="close-circle" size={16} color="#666" />
+                            </TouchableOpacity>
+                        )}
+                    </View>
                     <FlatList
-                        data={activeTab === 'Music' ? music : requests}
-                        keyExtractor={(item) => item.id}
-                        renderItem={activeTab === 'Music' ? renderMusicCard : renderRequestItem}
-                        numColumns={activeTab === 'Music' ? 2 : 1}
-                        key={activeTab} // Force re-render grid/list
-                        columnWrapperStyle={activeTab === 'Music' ? styles.row : null}
-                        contentContainerStyle={styles.list}
-                        showsVerticalScrollIndicator={false}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Ionicons 
-                                    name={activeTab === 'Music' ? "musical-notes-outline" : "notifications-off-outline"} 
-                                    size={60} 
-                                    color="#282828" 
-                                />
-                                <Text style={styles.emptyText}>Nothing here yet.</Text>
-                                <Text style={styles.emptySubtext}>
-                                    {activeTab === 'Music' ? "Start by uploading your first track!" : "You're all caught up with user requests."}
-                                </Text>
-                            </View>
-                        }
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={refreshing}
-                                onRefresh={onRefresh}
-                                tintColor="#1DB954"
-                                colors={["#1DB954"]}
-                            />
-                        }
+                        data={genres}
+                        keyExtractor={(item) => item}
+                        renderItem={renderGenreItem}
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.compactGenreList}
                     />
                 </View>
+            )}
+
+            {loading ? (
+                <FlatList
+                    data={[1, 2, 3, 4, 5, 6]}
+                    keyExtractor={(item) => `skeleton-${item}`}
+                    style={{ flex: 1 }}
+                    contentContainerStyle={styles.list}
+                    renderItem={() => (
+                        <View style={styles.row}>
+                            <SkeletonCard />
+                            <SkeletonCard />
+                        </View>
+                    )}
+                />
+            ) : activeTab === 'Music' ? (
+                <FlatList
+                    key="music_list_admin"
+                    style={{ flex: 1 }}
+                    data={filteredMusic}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderMusicCard}
+                    numColumns={2}
+                    columnWrapperStyle={styles.row}
+                    contentContainerStyle={styles.list}
+                    showsVerticalScrollIndicator={true}
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Ionicons name="musical-notes-outline" size={60} color="#282828" />
+                            <Text style={styles.emptyText}>Nothing here yet.</Text>
+                            <Text style={styles.emptySubtext}>
+                                {searchQuery || selectedGenre !== 'All' 
+                                    ? "No matches found for your search." 
+                                    : "Start by uploading your first track!"}
+                            </Text>
+                        </View>
+                    }
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor="#1DB954"
+                            colors={["#1DB954"]}
+                        />
+                    }
+                />
+            ) : (
+                <FlatList
+                    key="requests_list_admin"
+                    style={{ flex: 1 }}
+                    data={requests}
+                    keyExtractor={(item) => item.id}
+                    renderItem={renderRequestItem}
+                    numColumns={1}
+                    contentContainerStyle={styles.list}
+                    showsVerticalScrollIndicator={true}
+                    ListHeaderComponent={
+                        requests.length > 0 ? (
+                            <TouchableOpacity style={styles.clearHistoryBar} onPress={handleClearHistory}>
+                                <Ionicons name="trash-bin-outline" size={16} color="#aaa" />
+                                <Text style={styles.clearHistoryText}>Clear Processed History</Text>
+                            </TouchableOpacity>
+                        ) : null
+                    }
+                    ListEmptyComponent={
+                        <View style={styles.emptyContainer}>
+                            <Ionicons name="notifications-off-outline" size={60} color="#282828" />
+                            <Text style={styles.emptyText}>Nothing here yet.</Text>
+                            <Text style={styles.emptySubtext}>You're all caught up with user requests.</Text>
+                        </View>
+                    }
+                    refreshControl={
+                        <RefreshControl
+                            refreshing={refreshing}
+                            onRefresh={onRefresh}
+                            tintColor="#1DB954"
+                            colors={["#1DB954"]}
+                        />
+                    }
+                />
             )}
 
             <TouchableOpacity 
@@ -476,65 +573,114 @@ const styles = StyleSheet.create({
         backgroundColor: '#121212',
     },
     header: {
-        marginBottom: 20,
-        paddingHorizontal: 15,
+        marginBottom: 12,
     },
     exploreCard: {
         backgroundColor: '#1E1E1E',
-        borderRadius: 20,
-        padding: 15,
+        borderRadius: 12,
+        padding: 10,
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#333',
-        elevation: 10,
+        elevation: 8,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 5,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
     },
     menuButton: {
-        width: 44,
-        height: 44,
+        width: 36,
+        height: 36,
         backgroundColor: '#282828',
-        borderRadius: 22,
+        borderRadius: 18,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 15,
+        marginRight: 12,
     },
     exploreTextContainer: {
         flex: 1,
     },
     title: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: 'bold',
         color: '#fff',
         letterSpacing: 0.5,
     },
     subtitle: {
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: '500',
         color: '#1DB954',
     },
     releaseDate: {
-        color: '#666',
+        color: '#fff',
         fontSize: 9,
         fontStyle: 'italic',
         marginTop: 4,
+        textShadowColor: 'rgba(0,0,0,0.9)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 3,
     },
     tabBar: {
         flexDirection: 'row',
+        marginBottom: 10,
+    },
+    filterSection: {
         paddingHorizontal: 15,
-        marginBottom: 20,
+        marginBottom: 10,
+    },
+    searchBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1E1E1E',
+        borderRadius: 10,
+        paddingHorizontal: 12,
+        height: 36,
+        borderWidth: 1,
+        borderColor: '#282828',
+        marginBottom: 8,
+    },
+    searchIcon: {
+        marginRight: 8,
+    },
+    compactSearchInput: {
+        flex: 1,
+        color: '#fff',
+        fontSize: 13,
+        padding: 0,
+    },
+    compactGenreList: {
+        paddingRight: 15,
+    },
+    genreChip: {
+        paddingHorizontal: 12,
+        paddingVertical: 4,
+        borderRadius: 8,
+        backgroundColor: '#1E1E1E',
+        marginRight: 8,
+        borderWidth: 1,
+        borderColor: '#282828',
+    },
+    activeGenreChip: {
+        backgroundColor: '#1DB954',
+        borderColor: '#1DB954',
+    },
+    genreText: {
+        color: '#666',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    activeGenreText: {
+        color: '#000',
     },
     tab: {
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 12,
+        paddingVertical: 8,
         backgroundColor: '#1E1E1E',
-        borderRadius: 15,
+        borderRadius: 10,
         marginHorizontal: 5,
         borderWidth: 1,
         borderColor: '#282828',
@@ -565,14 +711,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
     },
     list: {
-        paddingBottom: 100,
+        flexGrow: 1,
+        paddingBottom: 120,
     },
     musicCard: {
         backgroundColor: '#1E1E1E',
-        width: '46%',
+        width: '48%',
         borderRadius: 15,
         marginBottom: 15,
-        marginHorizontal: '2%',
         overflow: 'hidden',
         elevation: 8,
         shadowColor: '#000',
@@ -599,12 +745,23 @@ const styles = StyleSheet.create({
     },
     trackCover: {
         width: '100%',
-        height: 150,
+        height: 180,
         backgroundColor: '#333',
+        position: 'relative',
+        overflow: 'hidden',
+    },
+    cardOverlay: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        paddingTop: 8,
+        paddingBottom: 10,
+        paddingHorizontal: 12,
     },
     playOverlay: {
         position: 'absolute',
-        bottom: 8,
+        top: 60,
         right: 8,
         width: 32,
         height: 32,
@@ -620,8 +777,9 @@ const styles = StyleSheet.create({
     },
     visualizerOverlay: {
         position: 'absolute',
-        bottom: 5,
-        left: 5,
+        top: 20,
+        left: '50%',
+        transform: [{ translateX: -15 }],
         zIndex: 10,
     },
     deleteAction: {
@@ -636,20 +794,37 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     cardInfo: {
-        padding: 12,
+        padding: 6,
     },
     musicTitle: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: 'bold',
+        textShadowColor: 'rgba(0,0,0,0.9)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 3,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+        alignSelf: 'flex-start',
+        marginBottom: 2,
     },
     musicArtist: {
-        color: '#aaa',
-        fontSize: 12,
+        color: '#fff',
+        fontSize: 11,
         marginTop: 2,
+        textShadowColor: 'rgba(0,0,0,1)',
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 4,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 3,
+        alignSelf: 'flex-start',
     },
     cardFooter: {
-        marginTop: 8,
+        marginTop: 4,
     },
     footerTop: {
         flexDirection: 'row',
@@ -662,7 +837,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 6,
         paddingVertical: 2,
         borderRadius: 4,
-        marginTop: 8,
+        marginTop: 4,
     },
     genreText: {
         color: '#1DB954',

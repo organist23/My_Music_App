@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../supabaseClient';
 
-import { downloadMusicFile } from '../../services/DownloadService';
+import { downloadMusicFile, cancelActiveDownload } from '../../services/DownloadService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -49,7 +49,48 @@ const MusicPlayerScreen = ({ navigation }) => {
                 NavigationBar.setButtonStyleAsync('light');
             }
             checkRequestStatus();
-        }, [currentTrack])
+
+            // Set up real-time sync for this track's status
+            const channel = supabase
+                .channel(`track_status_${currentTrack?.id}`)
+                .on(
+                    'postgres_changes',
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'music_requests',
+                        filter: `user_id=eq.${user?.id}`
+                    },
+                    (payload) => {
+                        if (payload.new && payload.new.music_id === currentTrack?.id) {
+                            setRequestStatus(payload.new.status);
+                        } else if (payload.eventType === 'DELETE' && payload.old.music_id === currentTrack?.id) {
+                            setRequestStatus('none');
+                        }
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'download_permissions',
+                        filter: `user_id=eq.${user?.id}`
+                    },
+                    (payload) => {
+                        if (payload.eventType === 'INSERT' && payload.new.music_id === currentTrack?.id) {
+                            setRequestStatus('approved');
+                        } else if (payload.eventType === 'DELETE' && payload.old.music_id === currentTrack?.id) {
+                            setRequestStatus('none');
+                        }
+                    }
+                )
+                .subscribe();
+
+            return () => {
+                supabase.removeChannel(channel);
+            };
+        }, [currentTrack, user])
     );
 
     const checkRequestStatus = async () => {
@@ -67,23 +108,32 @@ const MusicPlayerScreen = ({ navigation }) => {
                 .single();
 
             if (permData) {
-                setRequestStatus('approved');
-            } else {
-                // 2. Check requests
-                const { data: reqData } = await supabase
-                    .from('music_requests')
-                    .select('status')
-                    .eq('user_id', user.id)
-                    .eq('music_id', currentTrack.id)
-                    .single();
-
-                if (reqData) {
-                    if (reqData.status === 'approved') setRequestStatus('approved');
-                    else if (reqData.status === 'pending') setRequestStatus('pending');
-                    else setRequestStatus('none');
-                } else {
-                    setRequestStatus('none');
+                // Check if permission is older than 7 days
+                const grantedAt = new Date(permData.granted_at);
+                const now = new Date();
+                const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+                
+                if (now - grantedAt < sevenDaysInMs) {
+                    setRequestStatus('approved');
+                    return; // Valid permission found
                 }
+                // If expired, we don't return and let it fall through to check for a new pending request
+            }
+            
+            // 2. Check requests
+            const { data: reqData } = await supabase
+                .from('music_requests')
+                .select('status')
+                .eq('user_id', user.id)
+                .eq('music_id', currentTrack.id)
+                .single();
+
+            if (reqData) {
+                if (reqData.status === 'approved') setRequestStatus('approved');
+                else if (reqData.status === 'pending') setRequestStatus('pending');
+                else setRequestStatus('none');
+            } else {
+                setRequestStatus('none');
             }
         } catch (error) {
             console.error('Error checking status:', error);
@@ -103,8 +153,29 @@ const MusicPlayerScreen = ({ navigation }) => {
 
             if (error) throw error;
             
-            Alert.alert('Request Sent', `Your request for "${currentTrack.title}" has been sent to the admin.`);
             setRequestStatus('pending');
+        } catch (error) {
+            Alert.alert('Error', error.message);
+        } finally {
+            setCheckingStatus(false);
+        }
+    };
+
+    const handleUndoRequest = async () => {
+        if (!user || !currentTrack) return;
+
+        try {
+            setCheckingStatus(true);
+            const { error } = await supabase
+                .from('music_requests')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('music_id', currentTrack.id)
+                .eq('status', 'pending');
+
+            if (error) throw error;
+            
+            setRequestStatus('none');
         } catch (error) {
             Alert.alert('Error', error.message);
         } finally {
@@ -115,6 +186,14 @@ const MusicPlayerScreen = ({ navigation }) => {
     const handleDownload = async () => {
         if (!currentTrack) return;
         
+        // If already downloading, cancel it
+        if (downloading) {
+            await cancelActiveDownload();
+            setDownloading(false);
+            setDownloadProgress(0);
+            return;
+        }
+
         try {
             setDownloading(true);
             setDownloadProgress(0);
@@ -122,6 +201,7 @@ const MusicPlayerScreen = ({ navigation }) => {
             const result = await downloadMusicFile(
                 currentTrack.audio_url, 
                 currentTrack.title,
+                currentTrack.id,
                 (progress) => setDownloadProgress(progress)
             );
 
@@ -226,7 +306,7 @@ const MusicPlayerScreen = ({ navigation }) => {
                             <TouchableOpacity 
                                 style={[styles.downloadBtn, downloading && styles.downloadingBtn]} 
                                 onPress={handleDownload}
-                                disabled={downloading}
+                                activeOpacity={0.7}
                             >
                                 <View style={styles.downloadBtnContent}>
                                     <Ionicons 
@@ -235,16 +315,20 @@ const MusicPlayerScreen = ({ navigation }) => {
                                         color="#FFFFFF" 
                                     />
                                     <Text style={styles.downloadBtnText}>
-                                        {downloading ? `${Math.round(downloadProgress * 100)}%` : 'Download'}
+                                        {downloading ? `Cancel? ${Math.round(downloadProgress * 100)}%` : 'Download'}
                                     </Text>
                                     {downloading && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginLeft: 8 }} />}
                                 </View>
                             </TouchableOpacity>
                         ) : requestStatus === 'pending' ? (
-                            <View style={styles.pendingBadge}>
+                            <TouchableOpacity 
+                                style={styles.pendingBadge}
+                                onPress={handleUndoRequest}
+                                disabled={checkingStatus}
+                            >
                                 <Ionicons name="time-outline" size={16} color="#1DB954" />
-                                <Text style={styles.pendingText}>Request Pending</Text>
-                            </View>
+                                <Text style={styles.pendingText}>Request Pending (Tap to Undo)</Text>
+                            </TouchableOpacity>
                         ) : (
                             <TouchableOpacity 
                                 style={styles.requestBtn} 
@@ -282,11 +366,14 @@ const MusicPlayerScreen = ({ navigation }) => {
 
             <View style={styles.controls}>
                 <TouchableOpacity style={styles.sideBtn} onPress={toggleShuffle}>
-                    <Ionicons 
-                        name="shuffle" 
-                        size={28} 
-                        color={isShuffle ? '#1DB954' : '#666'} 
-                    />
+                    <View style={styles.controlWithBadge}>
+                        <Ionicons 
+                            name="shuffle" 
+                            size={28} 
+                            color={isShuffle ? '#1DB954' : '#666'} 
+                        />
+                        {isShuffle && <View style={styles.activeDot} />}
+                    </View>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.secondaryBtn} onPress={playPrev}>
@@ -311,12 +398,13 @@ const MusicPlayerScreen = ({ navigation }) => {
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.sideBtn} onPress={toggleRepeat}>
-                    <View>
+                    <View style={styles.controlWithBadge}>
                         <Ionicons 
                             name="repeat" 
                             size={28} 
                             color={repeatMode === 'none' ? '#666' : '#1DB954'} 
                         />
+                        {repeatMode !== 'none' && <View style={styles.activeDot} />}
                         {repeatMode === 'one' && (
                             <View style={styles.repeatBadge}>
                                 <Text style={styles.repeatBadgeText}>1</Text>
@@ -495,6 +583,19 @@ const styles = StyleSheet.create({
     },
     downloadingBtnText: {
         color: '#FFFFFF',
+    },
+    controlWithBadge: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    activeDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: '#1DB954',
+        marginTop: 4,
+        position: 'absolute',
+        bottom: -8,
     },
     heartOverlay: {
         position: 'absolute',

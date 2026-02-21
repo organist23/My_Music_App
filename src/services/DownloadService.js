@@ -3,16 +3,32 @@ const { StorageAccessFramework } = FileSystem;
 import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
 
-export const downloadMusicFile = async (url, fileName, onProgress, silent = false) => {
-    if (!url || !fileName) {
-        console.error('Invalid download parameters:', { url, fileName });
-        Alert.alert('Download Error', 'The music file URL or title is missing.');
+let activeDownloadResumable = null;
+
+export const cancelActiveDownload = async () => {
+    if (activeDownloadResumable) {
+        try {
+            await activeDownloadResumable.cancelAsync();
+            activeDownloadResumable = null;
+            return true;
+        } catch (error) {
+            console.error('Error cancelling download:', error);
+        }
+    }
+    return false;
+};
+
+export const downloadMusicFile = async (url, fileName, trackId, onProgress, silent = false) => {
+    if (!url || !fileName || !trackId) {
+        console.error('Invalid download parameters:', { url, fileName, trackId });
+        Alert.alert('Download Error', 'Required download information is missing.');
         return { success: false, error: 'Invalid parameters' };
     }
 
     try {
-        // 1. Create a safe filename (remove special characters)
-        const safeFileName = fileName.replace(/[^a-z0-9.]/gi, '_').toLowerCase() + '.mp3';
+        // 1. Create a safe, unique filename using trackId
+        const safeTitle = fileName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        const safeFileName = `${trackId}_${safeTitle}.mp3`;
         const fileUri = FileSystem.documentDirectory + safeFileName;
 
         // 2. Check if file already exists
@@ -37,7 +53,7 @@ export const downloadMusicFile = async (url, fileName, onProgress, silent = fals
         }
 
         // 3. Start download
-        const downloadResumable = FileSystem.createDownloadResumable(
+        activeDownloadResumable = FileSystem.createDownloadResumable(
             url,
             fileUri,
             {},
@@ -47,7 +63,14 @@ export const downloadMusicFile = async (url, fileName, onProgress, silent = fals
             }
         );
 
-        const { uri } = await downloadResumable.downloadAsync();
+        const downloadResult = await activeDownloadResumable.downloadAsync();
+        activeDownloadResumable = null;
+
+        if (!downloadResult) {
+            return { success: false, cancelled: true };
+        }
+
+        const { uri } = downloadResult;
         
         // 4. Save/Share the file (only if not silent)
         if (!silent) {
@@ -60,6 +83,13 @@ export const downloadMusicFile = async (url, fileName, onProgress, silent = fals
 
         return { success: true, uri };
     } catch (error) {
+        activeDownloadResumable = null;
+        
+        // Catch cancellation specifically so we don't show an error alert
+        if (error.message && error.message.includes('Download cancelled')) {
+            return { success: false, cancelled: true };
+        }
+        
         console.error('Download error:', error);
         if (!silent) {
             Alert.alert('Download Error', 'Failed to download the music file. Please try again.');
