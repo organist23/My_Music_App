@@ -64,22 +64,37 @@ const UploadMusicScreen = ({ navigation }) => {
 
         console.log(`[Upload] Starting: ${bucket}/${fileName}`);
         
-        // Get file blob for reliable binary upload
-        // We use fetch(uri) + blob() which is the most reliable way to get binary data in React Native/Expo
-        const response = await fetch(file.uri);
-        const blob = await response.blob();
+        // Read file as blob — can fail if file was deleted or storage is unavailable
+        let blob;
+        try {
+            const response = await fetch(file.uri);
+            if (!response.ok) throw new Error('Could not read the selected file.');
+            blob = await response.blob();
+        } catch (readErr) {
+            console.error('[Upload] File read error:', readErr);
+            throw new Error('Failed to read the file. It may have been moved or deleted. Please re-select it.');
+        }
 
         // Get actual session token for RLS to work properly
-        const { data: { session } } = await supabase.auth.getSession();
-        const token = session?.access_token;
+        let token;
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            token = session?.access_token;
+        } catch (sessionErr) {
+            console.error('[Upload] Session error:', sessionErr);
+            throw new Error('Could not verify your login session. Please log out and log in again.');
+        }
 
         if (!token) {
-            throw new Error('Authentication required. Please log in again.');
+            throw new Error('Your session has expired. Please log out and log in again.');
         }
 
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             activeXhr.current = xhr;
+
+            // Timeout: if no response within 60 seconds, abort
+            xhr.timeout = 60000;
             
             xhr.upload.addEventListener('progress', (event) => {
                 if (event.lengthComputable) {
@@ -105,16 +120,23 @@ const UploadMusicScreen = ({ navigation }) => {
                         const res = JSON.parse(xhr.responseText);
                         errorMsg = res.message || res.error || errorMsg;
                     } catch (e) {
-                        errorMsg = `Status ${xhr.status}`;
+                        errorMsg = `Server responded with status ${xhr.status}`;
                     }
                     console.error(`[Upload] Failure (${xhr.status}):`, errorMsg);
                     reject(new Error(errorMsg));
                 }
             });
 
-            xhr.addEventListener('error', (e) => {
-                console.error('[Upload] Network Error:', e);
-                reject(new Error('Network error during upload'));
+            // Network error — no internet, DNS failure, etc.
+            xhr.addEventListener('error', () => {
+                console.error('[Upload] Network Error — no response received');
+                reject(new Error('NETWORK_ERROR'));
+            });
+
+            // Timeout fired
+            xhr.addEventListener('timeout', () => {
+                console.error('[Upload] Request timed out after 60s');
+                reject(new Error('TIMEOUT_ERROR'));
             });
             
             xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
@@ -186,25 +208,47 @@ const UploadMusicScreen = ({ navigation }) => {
                 { text: 'OK', onPress: () => navigation.goBack() }
             ]);
         } catch (error) {
-            if (error.message !== 'Upload cancelled') {
-                console.error('Final Upload Error:', error);
-                
-                // If it's a 500 error, it's usually transient or a binary issue
-                const advice = error.message.includes('500') 
-                    ? '\n\nThis is a server error. Try a different file or check your connection.' 
-                    : '';
-                
-                Alert.alert('Upload Error', (error.message || 'An error occurred during upload') + advice);
+            if (error.message === 'Upload cancelled') return;
+
+            console.error('Final Upload Error:', error.message);
+
+            // Classify the error into a user-friendly message
+            let title = 'Upload Failed';
+            let message = 'An unexpected error occurred. Please try again.';
+
+            if (error.message === 'NETWORK_ERROR') {
+                title = 'No Internet Connection';
+                message = 'The upload failed because your device lost connection to the internet. Please check your Wi-Fi or mobile data and try again.';
+            } else if (error.message === 'TIMEOUT_ERROR') {
+                title = 'Upload Timed Out';
+                message = 'The connection was too slow and the upload timed out. Try on a faster network or upload a smaller file.';
+            } else if (error.message.includes('session') || error.message.includes('log in')) {
+                title = 'Session Expired';
+                message = error.message;
+            } else if (error.message.includes('security policy') || error.message.includes('row-level')) {
+                title = 'Permission Denied';
+                message = 'Your account does not have permission to upload music. Make sure you are logged in as an admin.';
+            } else if (error.message.includes('500') || error.message.includes('server')) {
+                title = 'Server Error';
+                message = 'The server encountered an error. Please wait a moment and try again. If the problem persists, try a different file.';
+            } else if (error.message.includes('read') || error.message.includes('file')) {
+                title = 'File Error';
+                message = error.message;
+            } else {
+                message = error.message || message;
             }
+
+            Alert.alert(title, message, [{ text: 'OK' }]);
         } finally {
             setUploading(false);
+            setUploadProgress(0);
+            setUploadStatus('');
             activeXhr.current = null;
         }
     };
 
     return (
         <ScrollView contentContainerStyle={styles.container}>
-            <Text style={styles.header}>Upload New Track</Text>
             
             <View style={styles.inputContainer}>
                 <Text style={styles.label}>Track Title</Text>
@@ -297,13 +341,6 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         backgroundColor: '#121212',
         padding: 20,
-    },
-    header: {
-        color: '#fff',
-        fontSize: 24,
-        fontWeight: 'bold',
-        marginBottom: 24,
-        textAlign: 'center',
     },
     inputContainer: {
         marginBottom: 20,

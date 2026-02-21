@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../context/AuthContext';
 import { useMenu } from '../../context/MenuContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { supabase } from '../../supabaseClient';
 import { downloadMusicFile, saveToSAF } from '../../services/DownloadService';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -19,8 +18,6 @@ const SettingsMaintenanceScreen = ({ navigation }) => {
         formatSystem,
         formatProgress 
     } = useMenu();
-    const insets = useSafeAreaInsets();
-
     const [backupProgress, setBackupProgress] = useState(null); // { current, total, name }
 
     useEffect(() => {
@@ -153,7 +150,6 @@ const SettingsMaintenanceScreen = ({ navigation }) => {
                 </View>
             )}
 
-            <View style={{ height: insets.top + 10 }} />
 
             <Text style={styles.sectionTitle}>System Maintenance</Text>
             
@@ -193,6 +189,7 @@ const styles = StyleSheet.create({
     },
     content: {
         padding: 20,
+        paddingTop: 24,
         paddingBottom: 40,
     },
     sectionTitle: {
