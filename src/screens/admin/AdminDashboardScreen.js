@@ -154,6 +154,9 @@ const AdminDashboardScreen = ({ navigation }) => {
             `Are you sure you want to permanently delete "${title}" and its storage files?`,
             [
                 { text: "Cancel", style: "cancel" },
+                { 
+                    text: "Delete", 
+                    style: "destructive", 
                     onPress: async () => {
                         try {
                             // Optimistic UI update with animation
@@ -172,13 +175,11 @@ const AdminDashboardScreen = ({ navigation }) => {
                             // 2. Delete from DB
                             const { error: dbError } = await supabase.from('music').delete().eq('id', id);
                             if (dbError) {
-                                // Revert optimistic update on error
-                                fetchMusic();
+                                fetchMusic(true);
                                 throw dbError;
                             }
 
                             // 3. Delete from Storage
-                            // ... (rest of storage logic remains the same)
                             if (track) {
                                 const audioFile = track.audio_url?.split('/').pop();
                                 const coverFile = track.cover_url?.split('/').pop();
@@ -191,14 +192,13 @@ const AdminDashboardScreen = ({ navigation }) => {
                                 }
                             }
 
-                            // Alert.alert('Success', `"${title}" and its files have been removed.`); // Optional: remove alert for smoother feel
                             await refreshStorageUsage();
-                            // fetchMusic(); // No need to fetch, optimistic UI handled it
                         } catch (error) {
                             Alert.alert('Error', error.message);
-                            fetchMusic(); // Re-sync on error
+                            fetchMusic(true);
                         }
                     } 
+                }
             ]
         );
     };
