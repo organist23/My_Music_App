@@ -167,7 +167,7 @@ const MenuModal = ({ visible, onClose }) => {
                         </TouchableOpacity>
 
                         <View style={styles.versionContainer}>
-                            <Text style={styles.versionText}>Version 1.0.0</Text>
+                            <Text style={styles.versionText}>Version 2.0.0</Text>
                         </View>
                     </View>
                 </Animated.View>

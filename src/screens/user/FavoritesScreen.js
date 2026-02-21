@@ -45,14 +45,9 @@ const FavoritesScreen = ({ navigation }) => {
 
     const formatDate = (dateString) => {
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
+        const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${day} • ${time}`;
     };
 
     const renderItem = ({ item }) => {
@@ -80,7 +75,9 @@ const FavoritesScreen = ({ navigation }) => {
                     <Text style={[styles.musicTitle, currentTrack?.id === item.music.id && { color: '#1DB954' }]} numberOfLines={1}>
                         {item.music.title}
                     </Text>
-                    <Text style={styles.musicArtist} numberOfLines={1}>{item.music.artist}</Text>
+                    <Text style={styles.musicArtist} numberOfLines={1}>
+                        {item.music.artist} <Text style={styles.artistDot}>•</Text> {item.music.genre}
+                    </Text>
                     <Text style={styles.releaseDate}>{formatDate(item.music.created_at)}</Text>
 
                 </View>
@@ -110,14 +107,9 @@ const FavoritesScreen = ({ navigation }) => {
             </View>
             {loading ? (
                 <View style={styles.list}>
-                    <View style={styles.skeletonRow}>
-                        <SkeletonCard />
-                        <SkeletonCard />
-                    </View>
-                    <View style={styles.skeletonRow}>
-                        <SkeletonCard />
-                        <SkeletonCard />
-                    </View>
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <SkeletonCard key={i} variant="row" />
+                    ))}
                 </View>
             ) : (
                 <FlatList
@@ -128,16 +120,15 @@ const FavoritesScreen = ({ navigation }) => {
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                        <Ionicons name="heart-dislike-outline" size={80} color="#333" />
-                        <Text style={styles.emptyText}>No favorites yet</Text>
-                        <Text style={styles.emptySubText}>Songs you like will appear here</Text>
-                        <TouchableOpacity 
-                            style={styles.exploreBtn}
-                            onPress={() => navigation.navigate('Home')}
-                        >
-                            <Text style={styles.exploreBtnText}>Explore Music</Text>
-                        </TouchableOpacity>
-                    </View>
+                            <Ionicons name="heart-dislike-outline" size={80} color="#333" />
+                            <Text style={styles.emptyText}>No favorites yet</Text>
+                            <TouchableOpacity 
+                                style={styles.exploreBtn}
+                                onPress={() => navigation.navigate('Home')}
+                            >
+                                <Text style={styles.exploreBtnText}>Explore Music</Text>
+                            </TouchableOpacity>
+                        </View>
                     }
                     refreshControl={
                         <RefreshControl
@@ -187,7 +178,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#1E1E1E',
         padding: 12,
-        borderRadius: 12,
+        borderRadius: 22,
         marginBottom: 12,
         borderWidth: 1,
         borderColor: '#282828',
@@ -229,13 +220,18 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     musicArtist: {
-        color: '#aaa',
-        fontSize: 14,
+        color: '#ccc',
+        fontSize: 11,
         marginTop: 2,
     },
+    artistDot: {
+        color: '#1DB954',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
     releaseDate: {
-        color: '#666',
-        fontSize: 10,
+        color: '#999',
+        fontSize: 8.5,
         fontStyle: 'italic',
         marginTop: 4,
     },
@@ -276,6 +272,23 @@ const styles = StyleSheet.create({
         color: '#aaa',
         textAlign: 'center',
         fontSize: 16,
+        marginBottom: 25,
+    },
+    exploreBtn: {
+        backgroundColor: '#1DB954',
+        paddingHorizontal: 25,
+        paddingVertical: 12,
+        borderRadius: 25,
+        elevation: 5,
+        shadowColor: '#1DB954',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+    },
+    exploreBtnText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
     skeletonRow: {
         flexDirection: 'row',

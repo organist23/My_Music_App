@@ -59,7 +59,14 @@ const PlaylistsScreen = ({ navigation }) => {
         setSongsRefreshing(true);
         await refreshPlaylistSongs(selectedPlaylist.id);
         setSongsRefreshing(false);
-    }, [selectedPlaylist, fetchPlaylistSongs]);
+    }, [selectedPlaylist, refreshPlaylistSongs]);
+
+    const formatDate = (dateString) => {
+        const date = new Date(dateString);
+        const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${day} • ${time}`;
+    };
 
     const handleRemoveSong = async (musicId) => {
         Alert.alert(
@@ -222,7 +229,10 @@ const PlaylistsScreen = ({ navigation }) => {
                     <Text style={[styles.songTitle, isCurrentID && styles.activeSongText]} numberOfLines={1}>
                         {item.music.title}
                     </Text>
-                    <Text style={styles.songArtist} numberOfLines={1}>{item.music.artist}</Text>
+                    <Text style={styles.songArtist} numberOfLines={1}>
+                        {item.music.artist} <Text style={styles.artistDot}>•</Text> {item.music.genre}
+                    </Text>
+                    <Text style={styles.releaseDate}>{formatDate(item.music.created_at)}</Text>
                 </View>
                 {isCurrentContext && (
                     <View style={[styles.playingBadge, !isPlaying && styles.pausedBadge]}>
@@ -245,10 +255,9 @@ const PlaylistsScreen = ({ navigation }) => {
         if (songsLoading) {
             return (
                 <View style={[styles.list, { marginTop: 20 }]}>
-                    <View style={styles.row}>
-                        <SkeletonCard />
-                        <SkeletonCard />
-                    </View>
+                    {[1, 2, 3, 4, 5].map(i => (
+                        <SkeletonCard key={i} variant="row" />
+                    ))}
                 </View>
             );
         }
@@ -377,14 +386,9 @@ const PlaylistsScreen = ({ navigation }) => {
 
             {loading ? (
                 <View style={styles.list}>
-                    <View style={styles.row}>
-                        <SkeletonCard />
-                        <SkeletonCard />
-                    </View>
-                    <View style={styles.row}>
-                        <SkeletonCard />
-                        <SkeletonCard />
-                    </View>
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <SkeletonCard key={i} variant="row" />
+                    ))}
                 </View>
             ) : (
                 <FlatList
@@ -488,7 +492,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#1E1E1E',
         padding: 15,
-        borderRadius: 15,
+        borderRadius: 22,
         marginBottom: 15,
         borderWidth: 1,
         borderColor: '#282828',
@@ -617,7 +621,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#1E1E1E',
         padding: 12,
-        borderRadius: 12,
+        borderRadius: 22,
         marginBottom: 12,
     },
     songMain: {
@@ -675,9 +679,20 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     songArtist: {
-        color: '#aaa',
-        fontSize: 13,
+        color: '#ccc',
+        fontSize: 11,
         marginTop: 2,
+    },
+    artistDot: {
+        color: '#1DB954',
+        fontSize: 12,
+        fontWeight: 'bold',
+    },
+    releaseDate: {
+        color: '#999',
+        fontSize: 8.5,
+        fontStyle: 'italic',
+        marginTop: 4,
     },
     removeBtn: {
         width: 40,

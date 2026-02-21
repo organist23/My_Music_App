@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, Platform, RefreshControl, TextInput, LayoutAnimation, UIManager } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Image, Platform, RefreshControl, TextInput, LayoutAnimation, UIManager, Animated } from 'react-native';
 import * as NavigationBar from 'expo-navigation-bar';
 import { useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../../supabaseClient';
@@ -28,6 +28,28 @@ const AdminDashboardScreen = ({ navigation }) => {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const skeletonOpacity = useRef(new Animated.Value(0.3)).current;
+
+    useEffect(() => {
+        if (loading) {
+            const pulse = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(skeletonOpacity, {
+                        toValue: 0.7,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(skeletonOpacity, {
+                        toValue: 0.3,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+            pulse.start();
+            return () => pulse.stop();
+        }
+    }, [loading]);
 
     useFocusEffect(
         useCallback(() => {
@@ -312,14 +334,9 @@ const AdminDashboardScreen = ({ navigation }) => {
 
     const formatDate = (dateString) => {
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
+        const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${day} • ${time}`;
     };
 
     const renderMusicCard = ({ item }) => {
@@ -341,37 +358,29 @@ const AdminDashboardScreen = ({ navigation }) => {
                     {/* Overlay Info Container */}
                     <View style={styles.cardOverlay}>
                         <View style={styles.cardInfo}>
+                            {currentTrack?.id === item.id && (
+                                <View style={styles.visualizerContainer}>
+                                    <PlayingVisualizer isPlaying={isPlaying} />
+                                </View>
+                            )}
                             <Text 
                                 style={[styles.musicTitle, isCurrent && { color: '#1DB954' }]} 
                                 numberOfLines={1}
-                                adjustsFontSizeToFit
-                                minimumFontScale={0.7}
                             >
                                 {item.title}
                             </Text>
-                            <Text style={styles.musicArtist} numberOfLines={1}>{item.artist}</Text>
-                            <View style={styles.cardFooter}>
-                                <View style={styles.footerTop}>
-                                    <View style={styles.genreBadge}>
-                                        <Text style={styles.genreText}>{item.genre}</Text>
-                                    </View>
-                                    <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
-                                </View>
-                            </View>
+                            <Text style={styles.musicArtist} numberOfLines={1}>
+                                {item.artist} <Text style={styles.artistDot}>•</Text> {item.genre}
+                            </Text>
+                            <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
                         </View>
                     </View>
-
-                    {currentTrack?.id === item.id && (
-                        <View style={styles.visualizerOverlay}>
-                            <PlayingVisualizer isPlaying={isPlaying} />
-                        </View>
-                    )}
 
                     <TouchableOpacity 
                         style={styles.deleteAction}
                         onPress={() => handleDelete(item.id, item.title)}
                     >
-                        <Ionicons name="trash-outline" size={16} color="#FF4136" />
+                        <Ionicons name="trash-outline" size={13} color="#FF4136" />
                     </TouchableOpacity>
 
                     <TouchableOpacity 
@@ -483,34 +492,19 @@ const AdminDashboardScreen = ({ navigation }) => {
                 >
                     <View>
                         <Ionicons name="notifications-outline" size={18} color={activeTab === 'Requests' ? '#1DB954' : '#666'} />
-                        {requests.filter(r => r.status === 'pending').length > 0 && <View style={styles.notifDot} />}
+                        {requests.filter(r => r.status === 'pending').length > 0 && (
+                            <View style={styles.notifBadge}>
+                                <Text style={styles.notifText}>
+                                    {requests.filter(r => r.status === 'pending').length}
+                                </Text>
+                            </View>
+                        )}
                     </View>
                     <Text style={[styles.tabText, activeTab === 'Requests' && styles.activeTabText]}>Requests</Text>
                 </TouchableOpacity>
             </View>
 
-            {loading ? (
-                <View style={styles.list}>
-                    {activeTab === 'Music' ? (
-                        <>
-                            <View style={styles.row}>
-                                <SkeletonCard />
-                                <SkeletonCard />
-                            </View>
-                            <View style={styles.row}>
-                                <SkeletonCard />
-                                <SkeletonCard />
-                            </View>
-                        </>
-                    ) : (
-                        <View style={{ paddingHorizontal: 15 }}>
-                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
-                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
-                            <View style={[styles.requestItem, { opacity: 0.5, height: 80, backgroundColor: '#1E1E1E' }]} />
-                        </View>
-                    )}
-                </View>
-            ) : (
+            {!loading && (
                 <View style={{ flexGrow: 0 }}>
                     {activeTab === 'Music' ? (
                         <View style={styles.filterSection}>
@@ -554,12 +548,23 @@ const AdminDashboardScreen = ({ navigation }) => {
                     data={[1, 2, 3, 4, 5, 6]}
                     keyExtractor={(item) => `skeleton-${item}`}
                     style={{ flex: 1 }}
-                    contentContainerStyle={styles.list}
+                    contentContainerStyle={[styles.list, activeTab === 'Requests' && { paddingHorizontal: 15 }]}
                     renderItem={() => (
-                        <View style={styles.row}>
-                            <SkeletonCard />
-                            <SkeletonCard />
-                        </View>
+                        activeTab === 'Music' ? (
+                            <View style={styles.row}>
+                                <SkeletonCard />
+                                <SkeletonCard />
+                            </View>
+                        ) : (
+                            <View style={[styles.requestItem, { backgroundColor: '#1E1E1E', marginBottom: 12 }]}>
+                                <Animated.View style={[styles.requestCover, { backgroundColor: '#333', opacity: skeletonOpacity }]} />
+                                <View style={styles.requestInfo}>
+                                    <Animated.View style={{ height: 16, width: '50%', backgroundColor: '#444', borderRadius: 4, marginBottom: 8, opacity: skeletonOpacity }} />
+                                    <Animated.View style={{ height: 12, width: '80%', backgroundColor: '#3a3a3a', borderRadius: 3, marginBottom: 10, opacity: skeletonOpacity }} />
+                                    <Animated.View style={{ height: 10, width: '30%', backgroundColor: '#282828', borderRadius: 2, opacity: skeletonOpacity }} />
+                                </View>
+                            </View>
+                        )
                     )}
                 />
             ) : activeTab === 'Music' ? (
@@ -679,7 +684,7 @@ const styles = StyleSheet.create({
     },
     releaseDate: {
         color: '#fff',
-        fontSize: 9,
+        fontSize: 8.5,
         fontStyle: 'italic',
         marginTop: 4,
         textShadowColor: 'rgba(0,0,0,0.9)',
@@ -762,16 +767,28 @@ const styles = StyleSheet.create({
     activeTabText: {
         color: '#fff',
     },
-    notifDot: {
+    notifBadge: {
         position: 'absolute',
-        top: -2,
-        right: -2,
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        top: -6,
+        right: -8,
         backgroundColor: '#FF4136',
+        borderRadius: 10,
+        minWidth: 16,
+        height: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 4,
+        borderWidth: 1.5,
+        borderColor: '#121212',
+    },
+    notifText: {
+        color: '#fff',
+        fontSize: 9,
+        fontWeight: 'bold',
+        textAlign: 'center',
     },
     row: {
+        flexDirection: 'row',
         justifyContent: 'space-between',
         paddingHorizontal: 15,
     },
@@ -782,7 +799,7 @@ const styles = StyleSheet.create({
     musicCard: {
         backgroundColor: '#1E1E1E',
         width: '48%',
-        borderRadius: 15,
+        borderRadius: 22,
         marginBottom: 15,
         overflow: 'hidden',
         elevation: 8,
@@ -810,7 +827,7 @@ const styles = StyleSheet.create({
     },
     trackCover: {
         width: '100%',
-        height: 180,
+        height: 210,
         backgroundColor: '#333',
         position: 'relative',
         overflow: 'hidden',
@@ -820,13 +837,16 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        paddingTop: 8,
-        paddingBottom: 10,
-        paddingHorizontal: 12,
+        paddingTop: 15,
+        paddingBottom: 15,
+        paddingHorizontal: 16,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        borderTopLeftRadius: 35,
+        borderTopRightRadius: 35,
     },
     playOverlay: {
         position: 'absolute',
-        top: 60,
+        bottom: 38,
         right: 8,
         width: 32,
         height: 32,
@@ -840,53 +860,48 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 2,
     },
-    visualizerOverlay: {
-        position: 'absolute',
-        top: 20,
-        left: '50%',
-        transform: [{ translateX: -15 }],
-        zIndex: 10,
+    visualizerContainer: {
+        alignSelf: 'flex-start',
+        marginBottom: 8,
+        height: 15,
+        transform: [{ scale: 0.8 }],
     },
     deleteAction: {
         position: 'absolute',
         top: 8,
-        right: 8,
-        width: 30,
-        height: 30,
-        borderRadius: 15,
+        left: 8,
+        width: 24,
+        height: 24,
+        borderRadius: 12,
         backgroundColor: 'rgba(0,0,0,0.6)',
         justifyContent: 'center',
         alignItems: 'center',
+        zIndex: 5,
     },
     cardInfo: {
-        padding: 6,
+        padding: 0,
     },
     musicTitle: {
         color: '#fff',
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: 'bold',
-        textShadowColor: 'rgba(0,0,0,0.9)',
-        textShadowOffset: { width: 1, height: 1 },
+        textShadowColor: 'rgba(0,0,0,0.8)',
+        textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
-        alignSelf: 'flex-start',
-        marginBottom: 2,
+        marginBottom: 6,
     },
     musicArtist: {
-        color: '#fff',
+        color: '#ccc',
         fontSize: 11,
-        marginTop: 2,
-        textShadowColor: 'rgba(0,0,0,1)',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 4,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-        borderRadius: 3,
-        alignSelf: 'flex-start',
+        marginBottom: 4,
+        textShadowColor: 'rgba(0,0,0,0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+    },
+    artistDot: {
+        color: '#1DB954',
+        fontSize: 12,
+        fontWeight: 'bold',
     },
     cardFooter: {
         marginTop: 4,
@@ -942,9 +957,16 @@ const styles = StyleSheet.create({
         marginTop: 2,
     },
     requestDate: {
-        color: '#666',
+        color: '#999',
         fontSize: 11,
+        fontStyle: 'italic',
         marginTop: 4,
+    },
+    releaseDate: {
+        color: '#999',
+        fontSize: 8.5,
+        fontStyle: 'italic',
+        marginTop: 0,
     },
     requestActions: {
         flexDirection: 'row',

@@ -64,10 +64,11 @@ export const FavoritesProvider = ({ children }) => {
     const toggleFavorite = async (track) => {
         if (!user) return;
 
-        const isFavorited = favorites.some(fav => fav.music_id === track.id);
+        // Check local state first for performance
+        const locallyFavorited = favorites.some(fav => fav.music_id === track.id);
 
         try {
-            if (isFavorited) {
+            if (locallyFavorited) {
                 // Remove from favorites
                 const { error } = await supabase
                     .from('favorites')
@@ -78,7 +79,8 @@ export const FavoritesProvider = ({ children }) => {
                 if (error) throw error;
                 setFavorites(prev => prev.filter(fav => fav.music_id !== track.id));
             } else {
-                // Add to favorites
+                // Before inserting, do a quick "upsert-like" check or just handle the conflict
+                // We'll try to insert, and if it fails with the unique constraint, we just fetch
                 const { data, error } = await supabase
                     .from('favorites')
                     .insert([{ user_id: user.id, music_id: track.id }])
@@ -89,11 +91,28 @@ export const FavoritesProvider = ({ children }) => {
                     `)
                     .single();
 
-                if (error) throw error;
-                setFavorites(prev => [...prev, data]);
+                if (error) {
+                    // If error is duplicate key (23505), it means it's already there
+                    if (error.code === '23505') {
+                        console.log('Track already favorited in DB, syncing local state...');
+                        fetchFavorites();
+                        return;
+                    }
+                    throw error;
+                }
+                
+                if (data) {
+                    setFavorites(prev => {
+                        // Avoid duplicates in local state too
+                        if (prev.some(fav => fav.music_id === track.id)) return prev;
+                        return [...prev, data];
+                    });
+                }
             }
         } catch (error) {
             console.error('Error toggling favorite:', error.message);
+            // On error, sync back with DB to ensure UI is correct
+            fetchFavorites();
         }
     };
 

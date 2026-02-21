@@ -106,14 +106,9 @@ const HomeScreen = ({ navigation }) => {
 
     const formatDate = (dateString) => {
         const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
+        const day = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+        return `${day} • ${time}`;
     };
 
     const isNewTrack = (dateString) => {
@@ -145,31 +140,23 @@ const HomeScreen = ({ navigation }) => {
                     {/* Overlay Info Container */}
                     <View style={styles.cardOverlay}>
                         <View style={styles.cardInfo}>
+                            {currentTrack?.id === item.id && (
+                                <View style={styles.visualizerContainer}>
+                                    <PlayingVisualizer isPlaying={isPlaying} />
+                                </View>
+                            )}
                             <Text 
-                                style={[styles.musicTitle, currentTrack?.id === item.id && { color: '#1DB954' }]} 
+                                style={[styles.musicTitle, isCurrent && { color: '#1DB954' }]} 
                                 numberOfLines={1}
-                                adjustsFontSizeToFit
-                                minimumFontScale={0.7}
                             >
                                 {item.title}
                             </Text>
-                            <Text style={styles.musicArtist} numberOfLines={1}>{item.artist}</Text>
-                            <View style={styles.metaInfo}>
-                                <View style={styles.metaTop}>
-                                    <View style={styles.genreBadge}>
-                                        <Text style={styles.musicGenre}>{item.genre}</Text>
-                                    </View>
-                                    <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
-                                </View>
-                            </View>
+                            <Text style={styles.musicArtist} numberOfLines={1}>
+                                {item.artist} <Text style={styles.artistDot}>•</Text> {item.genre}
+                            </Text>
+                            <Text style={styles.releaseDate}>{formatDate(item.created_at)}</Text>
                         </View>
                     </View>
-
-                    {currentTrack?.id === item.id && (
-                        <View style={styles.visualizerOverlay}>
-                            <PlayingVisualizer isPlaying={isPlaying} />
-                        </View>
-                    )}
                     {isNew && (
                         <View style={styles.newBadge}>
                             <Text style={styles.newBadgeText}>NEW</Text>
@@ -391,6 +378,7 @@ const styles = StyleSheet.create({
         color: '#000',
     },
     row: {
+        flexDirection: 'row',
         justifyContent: 'space-between',
     },
     list: {
@@ -399,7 +387,7 @@ const styles = StyleSheet.create({
     card: {
         backgroundColor: '#1E1E1E',
         width: '48%',
-        borderRadius: 15,
+        borderRadius: 22,
         marginBottom: 15,
         overflow: 'hidden',
         elevation: 8,
@@ -424,7 +412,7 @@ const styles = StyleSheet.create({
     },
     imageContainer: {
         width: '100%',
-        height: 180,
+        height: 210,
         backgroundColor: '#333',
         position: 'relative',
         overflow: 'hidden',
@@ -434,9 +422,12 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        paddingTop: 8,
-        paddingBottom: 10,
-        paddingHorizontal: 12,
+        paddingTop: 15, 
+        paddingBottom: 15,
+        paddingHorizontal: 16,
+        backgroundColor: 'rgba(0,0,0,0.6)', 
+        borderTopLeftRadius: 35,
+        borderTopRightRadius: 35,
     },
     cardCover: {
         width: '100%',
@@ -444,7 +435,7 @@ const styles = StyleSheet.create({
     },
     playOverlay: {
         position: 'absolute',
-        top: 60,
+        bottom: 38,
         right: 10,
         width: 36,
         height: 36,
@@ -459,12 +450,10 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 3,
     },
-    visualizerOverlay: {
-        position: 'absolute',
-        top: 20,
-        left: '50%',
-        transform: [{ translateX: -15 }],
-        zIndex: 5,
+    visualizerContainer: {
+        alignSelf: 'flex-start',
+        marginBottom: 8,
+        height: 20,
     },
     playIcon: {
         color: '#000',
@@ -472,34 +461,29 @@ const styles = StyleSheet.create({
         marginLeft: 2,
     },
     cardInfo: {
-        padding: 6,
+        padding: 0,
     },
     musicTitle: {
         color: '#fff',
-        fontSize: 17,
+        fontSize: 15,
         fontWeight: 'bold',
-        textShadowColor: 'rgba(0,0,0,0.9)',
-        textShadowOffset: { width: 1, height: 1 },
+        textShadowColor: 'rgba(0,0,0,0.8)',
+        textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 3,
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        paddingHorizontal: 8,
-        paddingVertical: 2,
-        borderRadius: 4,
-        alignSelf: 'flex-start',
-        marginBottom: 2,
+        marginBottom: 6,
     },
     musicArtist: {
-        color: '#fff',
+        color: '#ccc',
+        fontSize: 11,
+        marginBottom: 4,
+        textShadowColor: 'rgba(0,0,0,0.8)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
+    },
+    artistDot: {
+        color: '#1DB954',
         fontSize: 12,
-        marginTop: 2,
-        textShadowColor: 'rgba(0,0,0,1)',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 4,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        paddingHorizontal: 4,
-        paddingVertical: 1,
-        borderRadius: 3,
-        alignSelf: 'flex-start',
+        fontWeight: 'bold',
     },
     genreBadge: {
         backgroundColor: '#282828',
@@ -525,13 +509,9 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     releaseDate: {
-        color: '#fff',
-        fontSize: 10,
+        color: '#999',
+        fontSize: 8.5,
         fontStyle: 'italic',
-        opacity: 0.8,
-        textShadowColor: 'rgba(0,0,0,0.9)',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 3,
     },
     newBadge: {
         position: 'absolute',
