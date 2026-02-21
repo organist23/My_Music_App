@@ -19,6 +19,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#121212"
       },
+      "package": "com.organist23.musicapp",
       "edgeToEdgeEnabled": true,
       "navigationBar": {
         "backgroundColor": "#121212",
@@ -31,3 +32,4 @@
     }
   }
 }
+
