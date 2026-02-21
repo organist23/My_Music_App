@@ -26,10 +26,14 @@
         "barStyle": "light-content"
       }
     },
-
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "191608f8-94c1-4a42-b68e-2aef4642ed7d"
+      }
+    },
+    "owner": "keiphil"
   }
 }
-
