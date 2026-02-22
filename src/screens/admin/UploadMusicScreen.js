@@ -3,14 +3,16 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert,
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { supabase } from '../../supabaseClient';
+import * as FileSystem from 'expo-file-system/legacy';
+import { supabase, supabaseUrl, supabaseAnonKey } from '../../supabaseClient';
 import { useAuth } from '../../context/AuthContext';
 import { useMenu } from '../../context/MenuContext';
 
 /**
- * UploadMusicScreen - Version 3
- * Re-implemented to handle music uploads with progress tracking, 
- * cancellation, and advanced error handling for RLS and 500 errors.
+ * UploadMusicScreen - Version 5
+ * Re-engineered using expo-file-system native UploadTask.
+ * This handles large WAV/MP3 files much better than XMLHttpRequest 
+ * by avoiding JS heap memory issues.
  */
 const UploadMusicScreen = ({ navigation }) => {
     const [title, setTitle] = useState('');
@@ -21,7 +23,7 @@ const UploadMusicScreen = ({ navigation }) => {
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0); // 0 to 100
     const [uploadStatus, setUploadStatus] = useState(''); // Status message
-    const activeXhr = useRef(null);
+    const uploadTaskRef = useRef(null);
     const { user } = useAuth();
     const { refreshStorageUsage } = useMenu();
 
@@ -57,25 +59,16 @@ const UploadMusicScreen = ({ navigation }) => {
         }
     };
 
-    const uploadFile = async (file, bucket, progressWeight, progressOffset) => {
-        const fileExt = file.name ? file.name.split('.').pop() : (bucket === 'cover-images' ? 'jpg' : 'mp3');
+const uploadFile = async (file, bucket, progressWeight, progressOffset, attempt = 1) => {
+        const fileExt = file.name ? file.name.split('.').pop().toLowerCase() : (bucket === 'cover-images' ? 'jpg' : 'mp3');
         const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
         const filePath = `${fileName}`;
 
-        console.log(`[Upload] Starting: ${bucket}/${fileName}`);
+        console.log(`[Upload] Attempt ${attempt}: ${bucket}/${fileName}`);
         
-        // Read file as blob — can fail if file was deleted or storage is unavailable
-        let blob;
-        try {
-            const response = await fetch(file.uri);
-            if (!response.ok) throw new Error('Could not read the selected file.');
-            blob = await response.blob();
-        } catch (readErr) {
-            console.error('[Upload] File read error:', readErr);
-            throw new Error('Failed to read the file. It may have been moved or deleted. Please re-select it.');
-        }
+        // Dynamic check for UploadType to prevent "undefined" errors
+        const binaryUploadType = FileSystem.FileSystemUploadType?.BINARY_CONTENT ?? 0;
 
-        // Get actual session token for RLS to work properly
         let token;
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -89,71 +82,79 @@ const UploadMusicScreen = ({ navigation }) => {
             throw new Error('Your session has expired. Please log out and log in again.');
         }
 
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            activeXhr.current = xhr;
+        const uploadUrl = `${supabaseUrl}/storage/v1/object/${bucket}/${filePath}`;
+        
+        // Determine MimeType properly
+        let contentType = file.mimeType;
+        if (!contentType) {
+            if (fileExt === 'wav') contentType = 'audio/wav';
+            else if (fileExt === 'mp3') contentType = 'audio/mpeg';
+            else if (bucket === 'cover-images') contentType = 'image/jpeg';
+            else contentType = 'application/octet-stream';
+        }
 
-            // Timeout: if no response within 60 seconds, abort
-            xhr.timeout = 60000;
-            
-            xhr.upload.addEventListener('progress', (event) => {
-                if (event.lengthComputable) {
-                    const percentComplete = (event.loaded / event.total) * 100;
+        try {
+            const uploadTask = FileSystem.createUploadTask(
+                uploadUrl,
+                file.uri,
+                {
+                    httpMethod: 'POST',
+                    uploadType: binaryUploadType,
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'apikey': supabaseAnonKey,
+                        'Content-Type': contentType,
+                    },
+                },
+                (data) => {
+                    const { totalBytesSent, totalBytesExpectedToSend } = data;
+                    const percentComplete = (totalBytesSent / totalBytesExpectedToSend) * 100;
                     const overallProgress = progressOffset + (percentComplete * (progressWeight / 100));
                     const clampedProgress = Math.min(progressOffset + progressWeight, Math.max(progressOffset, Math.floor(overallProgress)));
                     setUploadProgress(clampedProgress);
                 }
-            });
+            );
 
-            xhr.addEventListener('load', () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                    setUploadProgress(progressOffset + progressWeight);
-                    console.log(`[Upload] Success: ${bucket}/${fileName}`);
-                    
-                    const { data: { publicUrl } } = supabase.storage
-                        .from(bucket)
-                        .getPublicUrl(filePath);
-                    resolve(publicUrl);
-                } else {
-                    let errorMsg = 'Storage error';
-                    try {
-                        const res = JSON.parse(xhr.responseText);
-                        errorMsg = res.message || res.error || errorMsg;
-                    } catch (e) {
-                        errorMsg = `Server responded with status ${xhr.status}`;
-                    }
-                    console.error(`[Upload] Failure (${xhr.status}):`, errorMsg);
-                    reject(new Error(errorMsg));
+            uploadTaskRef.current = uploadTask;
+            const result = await uploadTask.uploadAsync();
+            uploadTaskRef.current = null;
+
+            if (result.status >= 200 && result.status < 300) {
+                setUploadProgress(progressOffset + progressWeight);
+                console.log(`[Upload] Success: ${bucket}/${fileName}`);
+                const { data: { publicUrl } } = supabase.storage.from(bucket).getPublicUrl(filePath);
+                return publicUrl;
+            } else {
+                let errorMsg = 'Storage error';
+                try {
+                    const res = JSON.parse(result.body);
+                    errorMsg = res.message || res.error || errorMsg;
+                } catch (e) {
+                    errorMsg = `Server responded with status ${result.status}`;
                 }
-            });
+                console.error(`[Upload] Failure (${result.status}):`, errorMsg);
+                throw new Error(errorMsg);
+            }
+        } catch (error) {
+            uploadTaskRef.current = null;
+            if (error.message?.includes('cancelled')) throw new Error('Upload cancelled');
 
-            // Network error — no internet, DNS failure, etc.
-            xhr.addEventListener('error', () => {
-                console.error('[Upload] Network Error — no response received');
-                reject(new Error('NETWORK_ERROR'));
-            });
-
-            // Timeout fired
-            xhr.addEventListener('timeout', () => {
-                console.error('[Upload] Request timed out after 60s');
-                reject(new Error('TIMEOUT_ERROR'));
-            });
+            console.error(`[Upload] Error during task (Attempt ${attempt}):`, error.message);
             
-            xhr.addEventListener('abort', () => reject(new Error('Upload cancelled')));
-
-            // Direct API call to avoid potential client library wrapper issues causing 500s
-            xhr.open('POST', `${supabase.supabaseUrl}/storage/v1/object/${bucket}/${filePath}`);
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-            xhr.setRequestHeader('apikey', supabase.supabaseKey);
-            xhr.setRequestHeader('Content-Type', file.mimeType || (bucket === 'cover-images' ? 'image/jpeg' : 'audio/mpeg'));
-            
-            xhr.send(blob);
-        });
+            if (attempt < 3) {
+                const retryDelay = 2000 * attempt;
+                setUploadStatus(`Connection unstable, retrying (${attempt}/3)...`);
+                await new Promise(r => setTimeout(r, retryDelay));
+                return uploadFile(file, bucket, progressWeight, progressOffset, attempt + 1);
+            } else {
+                throw new Error('NETWORK_ERROR');
+            }
+        }
     };
 
     const handleCancel = () => {
-        if (activeXhr.current) {
-            activeXhr.current.abort();
+        if (uploadTaskRef.current) {
+            uploadTaskRef.current.cancelAsync();
             setUploading(false);
             setUploadProgress(0);
             setUploadStatus('');
@@ -217,11 +218,11 @@ const UploadMusicScreen = ({ navigation }) => {
             let message = 'An unexpected error occurred. Please try again.';
 
             if (error.message === 'NETWORK_ERROR') {
-                title = 'No Internet Connection';
-                message = 'The upload failed because your device lost connection to the internet. Please check your Wi-Fi or mobile data and try again.';
+                title = 'Upload Interrupted';
+                message = 'The upload was interrupted. This could be due to a flaky internet connection, a very large file, or a temporary server issue. Please try again with a smaller file or on a more stable network.';
             } else if (error.message === 'TIMEOUT_ERROR') {
                 title = 'Upload Timed Out';
-                message = 'The connection was too slow and the upload timed out. Try on a faster network or upload a smaller file.';
+                message = 'The connection was too slow and the upload timed out after several attempts. Try a faster network or a smaller file.';
             } else if (error.message.includes('session') || error.message.includes('log in')) {
                 title = 'Session Expired';
                 message = error.message;
@@ -243,7 +244,7 @@ const UploadMusicScreen = ({ navigation }) => {
             setUploading(false);
             setUploadProgress(0);
             setUploadStatus('');
-            activeXhr.current = null;
+            uploadTaskRef.current = null;
         }
     };
 
