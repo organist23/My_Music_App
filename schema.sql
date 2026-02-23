@@ -1,8 +1,11 @@
 -- Profiles Table
 CREATE TABLE profiles (
-  id UUID REFERENCES auth.users(id) PRIMARY KEY,
+  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
   full_name TEXT NOT NULL,
+  email TEXT,
   role TEXT DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  recovery_code TEXT,
+  recovery_pin TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
@@ -25,7 +28,7 @@ CREATE TABLE music (
   genre TEXT NOT NULL,
   audio_url TEXT NOT NULL,
   cover_url TEXT NOT NULL,
-  uploaded_by UUID REFERENCES profiles(id) NOT NULL,
+  uploaded_by UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 

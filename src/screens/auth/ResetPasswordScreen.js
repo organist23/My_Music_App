@@ -1,28 +1,43 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Image, Dimensions, KeyboardAvoidingView, Platform, ImageBackground, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert, Dimensions, KeyboardAvoidingView, Platform, Image, ScrollView } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { Ionicons } from '@expo/vector-icons';
 
 const { width } = Dimensions.get('window');
 
-const LoginScreen = ({ navigation }) => {
+const ResetPasswordScreen = ({ navigation }) => {
     const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+    const [recoveryPin, setRecoveryPin] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
-    const { login, loading } = useAuth();
+    const { resetPassword, loading } = useAuth();
 
-    const handleLogin = async () => {
-        if (!email || !password) {
+    const handleReset = async () => {
+        if (!email || !recoveryPin || !newPassword || !confirmPassword) {
             Alert.alert('Error', 'Please fill in all fields');
             return;
         }
-        const { error } = await login(email.trim(), password);
+        if (recoveryPin.length !== 4) {
+            Alert.alert('Error', 'Recovery PIN must be 4 digits');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            Alert.alert('Error', 'Passwords do not match');
+            return;
+        }
+        if (newPassword.length < 6) {
+            Alert.alert('Error', 'Password must be at least 6 characters');
+            return;
+        }
+
+        const { error } = await resetPassword(email, recoveryPin, newPassword);
         if (error) {
-            const isNetworkError = error.message.includes('network') || error.message.includes('internet connection');
-            Alert.alert(
-                isNetworkError ? 'No Internet' : 'Login Failed', 
-                error.message
-            );
+            Alert.alert('Error', error.message || 'Failed to reset password. Check your email and recovery PIN.');
+        } else {
+            Alert.alert('Success', 'Password has been reset successfully!', [
+                { text: 'Login Now', onPress: () => navigation.navigate('Login') }
+            ]);
         }
     };
 
@@ -36,7 +51,7 @@ const LoginScreen = ({ navigation }) => {
                 />
             </View>
             <KeyboardAvoidingView 
-                behavior="padding"
+                behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
                 style={styles.container}
             >
                 <View style={styles.userInteractionsContainer}>
@@ -54,8 +69,10 @@ const LoginScreen = ({ navigation }) => {
                         </View>
 
                         <View style={styles.contentContainer}>
+                            <Text style={styles.title}>Reset Password</Text>
+                            <Text style={styles.subtitle}>Enter your details and secret 4-digit PIN</Text>
+
                             <View style={styles.card}>
-                                <Text style={styles.subtitle}>Sign in to your account</Text>
                                 <View style={styles.inputSection}>
                                     <View style={styles.inputWrapper}>
                                         <Ionicons name="mail-outline" size={20} color="#666" style={styles.inputIcon} />
@@ -71,13 +88,27 @@ const LoginScreen = ({ navigation }) => {
                                     </View>
 
                                     <View style={styles.inputWrapper}>
+                                        <Ionicons name="shield-checkmark-outline" size={20} color="#1DB954" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="4-Digit Secret PIN"
+                                            placeholderTextColor="#666"
+                                            value={recoveryPin}
+                                            onChangeText={(text) => setRecoveryPin(text.replace(/[^0-9]/g, '').slice(0, 4))}
+                                            keyboardType="number-pad"
+                                            maxLength={4}
+                                            secureTextEntry
+                                        />
+                                    </View>
+
+                                    <View style={styles.inputWrapper}>
                                         <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
                                         <TextInput
                                             style={styles.input}
-                                            placeholder="Password"
+                                            placeholder="New Password"
                                             placeholderTextColor="#666"
-                                            value={password}
-                                            onChangeText={setPassword}
+                                            value={newPassword}
+                                            onChangeText={setNewPassword}
                                             secureTextEntry={!showPassword}
                                         />
                                         <TouchableOpacity 
@@ -91,36 +122,47 @@ const LoginScreen = ({ navigation }) => {
                                             />
                                         </TouchableOpacity>
                                     </View>
+
+                                    <View style={styles.inputWrapper}>
+                                        <Ionicons name="lock-closed-outline" size={20} color="#666" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Confirm New Password"
+                                            placeholderTextColor="#666"
+                                            value={confirmPassword}
+                                            onChangeText={setConfirmPassword}
+                                            secureTextEntry={!showPassword}
+                                        />
+                                    </View>
                                 </View>
 
                                 <TouchableOpacity 
-                                    style={[styles.button, (!email || !password) && styles.buttonDisabled]} 
-                                    onPress={handleLogin}
-                                    disabled={loading || !email || !password}
+                                    style={[styles.button, (!email || recoveryPin.length !== 4 || !newPassword) && styles.buttonDisabled]} 
+                                    onPress={handleReset}
+                                    disabled={loading || !email || recoveryPin.length !== 4 || !newPassword}
                                 >
                                     {loading ? (
                                         <ActivityIndicator color="#000" />
                                     ) : (
-                                        <Text style={styles.buttonText}>Login</Text>
+                                        <Text style={styles.buttonText}>Reset Password</Text>
                                     )}
                                 </TouchableOpacity>
                             </View>
 
-                            <View style={styles.footer}>
-                                <Text style={styles.footerText}>Don't have an account? </Text>
-                                <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                                    <Text style={styles.linkHighlight}>Register Now</Text>
+                            <View style={styles.recoveryHelp}>
+                                <Text style={styles.helpText}>Forgot your PIN? </Text>
+                                <TouchableOpacity onPress={() => Alert.alert('Recovery Help', 'Please contact the administrator via Messenger to verify your identity and retrieve your PIN.', [{ text: 'OK' }])}>
+                                    <Text style={styles.linkHighlight}>Contact Admin</Text>
                                 </TouchableOpacity>
                             </View>
 
                             <TouchableOpacity 
-                                style={{ marginTop: 15 }} 
-                                onPress={() => navigation.navigate('ResetPassword')}
+                                style={styles.backButton}
+                                onPress={() => navigation.goBack()}
                             >
-                                <Text style={styles.linkHighlight}>Forgot Password?</Text>
+                                <Ionicons name="arrow-back" size={20} color="#1DB954" />
+                                <Text style={styles.backButtonText}>Back to Login</Text>
                             </TouchableOpacity>
-
-                            <Text style={styles.copyrightText}>© 2026 Keiphil Guimba</Text>
                         </View>
                     </ScrollView>
                 </View>
@@ -155,7 +197,7 @@ const styles = StyleSheet.create({
     },
     userInteractionsContainer: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.3)', // Overall dark overlay to fade the circle edges
+        backgroundColor: 'rgba(0,0,0,0.3)',
     },
     scrollContainer: {
         flexGrow: 1,
@@ -165,7 +207,7 @@ const styles = StyleSheet.create({
     },
     logoContainer: {
         alignItems: 'center',
-        marginBottom: 30,
+        marginBottom: 20,
     },
     logo: {
         width: 120,
@@ -173,7 +215,6 @@ const styles = StyleSheet.create({
         borderRadius: 60,
         borderWidth: 2,
         borderColor: 'rgba(29, 185, 84, 0.5)',
-        // Softer, more professional depth
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
         shadowOpacity: 0.4,
@@ -185,26 +226,25 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     title: {
-        fontSize: 32,
+        fontSize: 28,
         fontWeight: 'bold',
         color: '#fff',
         letterSpacing: -0.5,
         textAlign: 'center',
     },
     subtitle: {
-        fontSize: 15,
+        fontSize: 14,
         color: '#aaa',
-        marginTop: 0,
+        marginTop: 5,
         fontWeight: '500',
         marginBottom: 25,
         textAlign: 'center',
     },
     card: {
         width: '100%',
-        backgroundColor: 'rgba(30, 30, 30, 0.85)', // Glassmorphism
+        backgroundColor: 'rgba(30, 30, 30, 0.85)',
         borderRadius: 30,
-        padding: 28,
-        paddingTop: 20,
+        padding: 25,
         borderWidth: 1.5,
         borderColor: 'rgba(255, 255, 255, 0.1)',
         elevation: 20,
@@ -257,12 +297,23 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
     },
-    footer: {
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 15,
+    },
+    backButtonText: {
+        color: '#1DB954',
+        fontSize: 15,
+        fontWeight: 'bold',
+        marginLeft: 8,
+    },
+    recoveryHelp: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginTop: 30,
+        marginTop: 20,
     },
-    footerText: {
+    helpText: {
         color: '#aaa',
         fontSize: 15,
     },
@@ -271,12 +322,6 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: 'bold',
     },
-    copyrightText: {
-        color: '#666',
-        fontSize: 12,
-        marginTop: 30,
-        textAlign: 'center',
-    },
 });
 
-export default LoginScreen;
+export default ResetPasswordScreen;

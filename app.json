@@ -2,6 +2,7 @@
   "expo": {
     "name": "Music_app",
     "slug": "Music_app",
+    "scheme": "musicapp",
     "version": "3.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

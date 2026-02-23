@@ -20,6 +20,7 @@ const MyTheme = {
 // Auth Screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import RegisterScreen from '../screens/auth/RegisterScreen';
+import ResetPasswordScreen from '../screens/auth/ResetPasswordScreen';
 
 // Admin Screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
@@ -41,6 +42,7 @@ const AuthStack = () => (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={RegisterScreen} />
+        <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} />
     </Stack.Navigator>
 );
 
@@ -131,6 +133,7 @@ const RootNavigator = () => {
                         <Stack.Screen name="Auth" component={AuthStack} />
                     ) : (
                         <>
+                            {/* If role is explicitly admin, show admin stack, else default to user stack immediately */}
                             {role === 'admin' ? (
                                 <Stack.Screen name="Admin" component={AdminStack} />
                             ) : (

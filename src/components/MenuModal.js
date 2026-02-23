@@ -18,6 +18,8 @@ const MenuModal = ({ visible, onClose }) => {
         refreshStorageUsage 
     } = useMenu();
     const [showSupport, setShowSupport] = React.useState(false);
+    const [showUserSettings, setShowUserSettings] = React.useState(false);
+    const [isPinVisible, setIsPinVisible] = React.useState(false);
     const slideAnim = React.useRef(new Animated.Value(-width)).current;
 
     const isAdmin = profile?.role === 'admin';
@@ -44,10 +46,19 @@ const MenuModal = ({ visible, onClose }) => {
         onClose();
     };
 
+    const handleCopyPin = () => {
+        import('react-native').then(({ Clipboard, Alert }) => {
+            Clipboard.setString(profile?.recovery_pin || '');
+            Alert.alert('Copied', 'Secret PIN copied to clipboard!');
+        });
+    };
+
     const handleSettings = () => {
-        onClose();
         if (isAdmin) {
+            onClose();
             navigation.navigate('Settings');
+        } else {
+            setShowUserSettings(!showUserSettings);
         }
     };
     
@@ -123,11 +134,38 @@ const MenuModal = ({ visible, onClose }) => {
                                 <Text style={styles.menuText}>View Profile</Text>
                             </TouchableOpacity>
                             
-                            <TouchableOpacity style={styles.menuItem} onPress={handleSettings}>
-                                <Ionicons name="settings-outline" size={22} color="#fff" />
-                                <Text style={styles.menuText}>Settings</Text>
-                            </TouchableOpacity>
+                            <View>
+                                <TouchableOpacity style={styles.menuItem} onPress={handleSettings}>
+                                    <Ionicons name="settings-outline" size={22} color="#fff" />
+                                    <Text style={styles.menuText}>Settings</Text>
+                                </TouchableOpacity>
 
+                                {!isAdmin && showUserSettings && (
+                                    <View style={styles.expandedSupport}>
+                                        <View style={styles.recoveryCodeRow}>
+                                            <View style={styles.codeContainer}>
+                                                <Text style={styles.codeLabel}>YOUR SECRET RECOVERY PIN</Text>
+                                                <Text style={styles.codeValue}>
+                                                    {isPinVisible ? profile?.recovery_pin : '****'}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.codeActions}>
+                                                <TouchableOpacity 
+                                                    style={styles.codeActionBtn} 
+                                                    onPress={() => setIsPinVisible(!isPinVisible)}
+                                                >
+                                                    <Ionicons name={isPinVisible ? "eye-off" : "eye"} size={20} color="#aaa" />
+                                                </TouchableOpacity>
+                                                <TouchableOpacity style={styles.codeActionBtn} onPress={handleCopyPin}>
+                                                    <Ionicons name="copy-outline" size={20} color="#1DB954" />
+                                                </TouchableOpacity>
+                                            </View>
+                                        </View>
+                                        <Text style={styles.recoveryHint}>Keep this safe! Use it to reset your password if you ever forget it.</Text>
+                                    </View>
+                                )}
+                            </View>
+                            
                             <View>
                                 <TouchableOpacity 
                                     style={styles.menuItem} 
@@ -343,6 +381,43 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         letterSpacing: 1,
         textTransform: 'uppercase',
+    },
+    recoveryCodeRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 5,
+    },
+    codeContainer: {
+        flex: 1,
+    },
+    codeLabel: {
+        color: '#ff4444',
+        fontSize: 8,
+        fontWeight: 'bold',
+        marginBottom: 2,
+    },
+    codeValue: {
+        color: '#fff',
+        fontSize: 20,
+        fontWeight: 'bold',
+        letterSpacing: 2,
+    },
+    codeActions: {
+        flexDirection: 'row',
+    },
+    codeActionBtn: {
+        padding: 8,
+        marginLeft: 5,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        borderRadius: 8,
+    },
+    recoveryHint: {
+        color: '#666',
+        fontSize: 10,
+        marginTop: 10,
+        paddingHorizontal: 5,
+        fontStyle: 'italic',
     },
 });
 

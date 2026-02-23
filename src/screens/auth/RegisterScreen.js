@@ -12,11 +12,16 @@ const RegisterScreen = ({ navigation }) => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [recoveryPin, setRecoveryPin] = useState('');
     const { register, loading } = useAuth();
 
     const handleRegister = async () => {
-        if (!fullName || !email || !password || !confirmPassword) {
-            Alert.alert('Error', 'Please fill in all fields');
+        if (!fullName || !email || !password || !confirmPassword || !recoveryPin) {
+            Alert.alert('Error', 'Please fill in all fields including the 4-digit PIN');
+            return;
+        }
+        if (recoveryPin.length !== 4 || !/^\d+$/.test(recoveryPin)) {
+            Alert.alert('Error', 'Recovery PIN must be exactly 4 digits');
             return;
         }
         if (password !== confirmPassword) {
@@ -24,11 +29,19 @@ const RegisterScreen = ({ navigation }) => {
             return;
         }
 
-        const { error } = await register(email, password, fullName);
+        const { error } = await register(email, password, fullName, recoveryPin);
         if (error) {
-            Alert.alert('Registration Error', error.message);
+            const isNetworkError = error.message.includes('Unstable network') || error.message.includes('check your internet');
+            Alert.alert(
+                isNetworkError ? 'No Internet' : 'Signup Failed', 
+                error.message
+            );
         } else {
-            Alert.alert('Success', 'Account created successfully!');
+            Alert.alert(
+                'Success', 
+                `Account created securely! \n\nIMPORTANT: Your 4-digit Recovery PIN is: ${recoveryPin}\n\nKeep this safe! You will need it to reset your password if you ever forget it.`,
+                [{ text: 'Got it!', onPress: () => navigation.navigate('Login') }]
+            );
         }
     };
 
@@ -42,11 +55,15 @@ const RegisterScreen = ({ navigation }) => {
                 />
             </View>
             <KeyboardAvoidingView 
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior="padding"
                 style={styles.container}
             >
                 <View style={styles.userInteractionsContainer}>
-                    <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+                    <ScrollView 
+                        contentContainerStyle={styles.scrollContainer} 
+                        showsVerticalScrollIndicator={false}
+                        keyboardShouldPersistTaps="handled"
+                    >
                         <View style={styles.logoContainer}>
                             <Image 
                                 source={require('../../../logo/logo_login.png')} 
@@ -128,12 +145,25 @@ const RegisterScreen = ({ navigation }) => {
                                             />
                                         </TouchableOpacity>
                                     </View>
+                                    <View style={styles.inputWrapper}>
+                                        <Ionicons name="shield-checkmark-outline" size={20} color="#1DB954" style={styles.inputIcon} />
+                                        <TextInput
+                                            style={styles.input}
+                                            placeholder="Secret 4-Digit PIN"
+                                            placeholderTextColor="#666"
+                                            value={recoveryPin}
+                                            onChangeText={(text) => setRecoveryPin(text.replace(/[^0-9]/g, '').slice(0, 4))}
+                                            keyboardType="number-pad"
+                                            secureTextEntry
+                                            maxLength={4}
+                                        />
+                                    </View>
                                 </View>
 
                                 <TouchableOpacity 
-                                    style={[styles.button, (!fullName || !email || !password || !confirmPassword) && styles.buttonDisabled]} 
+                                    style={[styles.button, (!fullName || !email || !password || !confirmPassword || recoveryPin.length !== 4) && styles.buttonDisabled]} 
                                     onPress={handleRegister}
-                                    disabled={loading || !fullName || !email || !password || !confirmPassword}
+                                    disabled={loading || !fullName || !email || !password || !confirmPassword || recoveryPin.length !== 4}
                                 >
                                     {loading ? (
                                         <ActivityIndicator color="#000" />
@@ -190,7 +220,6 @@ const styles = StyleSheet.create({
     },
     scrollContainer: {
         flexGrow: 1,
-        justifyContent: 'center',
         paddingHorizontal: 25,
         paddingVertical: 50,
     },
@@ -199,16 +228,16 @@ const styles = StyleSheet.create({
         marginBottom: 30,
     },
     logo: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        borderWidth: 3,
-        borderColor: '#1DB954',
-        shadowColor: '#1DB954',
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.8,
-        shadowRadius: 20,
-        elevation: 15,
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 2,
+        borderColor: 'rgba(29, 185, 84, 0.5)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+        elevation: 10,
     },
     contentContainer: {
         width: '100%',
