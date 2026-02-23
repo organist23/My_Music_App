@@ -38,11 +38,12 @@ export const AuthProvider = ({ children }) => {
             if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
                 const lastSignIn = new Date(session.user.last_sign_in_at).getTime();
                 const confirmedAt = new Date(session.user.email_confirmed_at).getTime();
+                const now = Date.now();
                 
-                // If confirmed and signed in within a 2-second window, it's likely a verification redirect
-                // But we only want this if they were PREVIOUSLY not verified. 
-                // For now, let's just make it more specific or let the auto-login happen.
-                if (Math.abs(lastSignIn - confirmedAt) < 2000 && !session.user.user_metadata?.auto_logged_in) {
+                // Only sign out if the verification just happened (within last 10 seconds)
+                // AND the sign-in happened exactly when the verification did.
+                // This prevents session restoration from being treated as a verification event.
+                if (Math.abs(lastSignIn - confirmedAt) < 2000 && Math.abs(now - confirmedAt) < 10000 && !session.user.user_metadata?.auto_logged_in) {
                     await supabase.auth.signOut();
                     setUser(null);
                     setProfile(null);

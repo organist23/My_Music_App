@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
+import { useAuth } from './AuthContext';
 
 const PlayerContext = createContext({});
 
@@ -125,6 +126,33 @@ export const PlayerProvider = ({ children }) => {
             if (index !== -1) updateCurrentIndex(index);
         }
     };
+
+    const stopPlayback = async () => {
+        try {
+            if (sound) {
+                await sound.unloadAsync().catch(() => {});
+                setSound(null);
+            }
+            setIsPlaying(false);
+            setIsBuffering(false);
+            setCurrentTrack(null);
+            currentTrackRef.current = null;
+            updateCurrentIndex(-1);
+            setQueue([]);
+            setShuffledQueue([]);
+        } catch (e) {
+            console.error('Error stopping playback:', e);
+        }
+    };
+
+    // Logout Watchdog: Stop music if user logs out
+    const { user } = useAuth();
+    useEffect(() => {
+        if (!user && (sound || isPlaying)) {
+            console.log('User logged out, stopping playback...');
+            stopPlayback();
+        }
+    }, [user]);
 
     const playTrack = async (track, newQueue = [], context = null) => {
         if (!track) return;
@@ -291,7 +319,8 @@ export const PlayerProvider = ({ children }) => {
             currentTrack, isPlaying, isBuffering, position, duration,
             repeatMode, isShuffle, toggleRepeat, toggleShuffle,
             playNext, playPrev, playTrack, togglePlayPause, seek,
-            queue, currentIndex, playingFrom, loadingTrackId, isLoading
+            queue, currentIndex, playingFrom, loadingTrackId, isLoading,
+            stopPlayback
         }}>
             {children}
         </PlayerContext.Provider>
