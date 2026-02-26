@@ -114,10 +114,13 @@ const UserTabs = () => {
 };
 
 const RootNavigator = () => {
-    const { user, role, loading } = useAuth();
+    const { user, role, loading, isSyncingProfile } = useAuth();
     const { menuVisible, closeMenu } = useMenu();
 
-    if (loading) {
+    // Show loading spinner if:
+    // 1. Initial auth check is happening (loading)
+    // 2. We have a user but don't know their role yet (isSyncingProfile && !role)
+    if (loading || (user && !role && isSyncingProfile)) {
         return (
             <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
                 <ActivityIndicator size="large" color="#1DB954" />

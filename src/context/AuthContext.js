@@ -7,43 +7,51 @@ export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [isSyncingProfile, setIsSyncingProfile] = useState(false);
 
     useEffect(() => {
-        // Check active sessions and sets the user
-        const getSession = async () => {
+        let isMounted = true;
+
+        const initializeAuth = async () => {
             try {
+                setLoading(true);
+                // 1. Get initial session
                 const { data: { session } } = await supabase.auth.getSession();
                 const sessionUser = session?.user ?? null;
-                setUser(sessionUser);
                 
-                if (sessionUser) {
-                    await fetchProfile(sessionUser.id);
+                if (isMounted) {
+                    setUser(sessionUser);
+                    if (sessionUser) {
+                        setIsSyncingProfile(true);
+                        // CRITICAL: Await the initial profile fetch so RootNavigator 
+                        // knows the role BEFORE we set loading to false.
+                        await fetchProfile(sessionUser.id);
+                        setIsSyncingProfile(false);
+                    }
                 }
             } catch (error) {
-                console.error('Session check error:', error);
+                console.error('Auth initialization error:', error);
             } finally {
-                setLoading(false);
+                if (isMounted) {
+                    setLoading(false);
+                    setIsSyncingProfile(false);
+                }
             }
         };
 
-        getSession();
+        initializeAuth();
 
-        // Listen for changes on auth state (logged in, signed out, etc.)
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (!isMounted) return;
             const sessionUser = session?.user ?? null;
             
-            // LOGIC FOR EMAIL VERIFICATION REDIRECT
-            // If the user just signed in via a verified link, sign them out to redirect to login
-            // Skip this if confirmed_at is very old or if we want auto-login
+            // EMAIL VERIFICATION REDIRECT
             if (event === 'SIGNED_IN' && session?.user?.email_confirmed_at) {
                 const lastSignIn = new Date(session.user.last_sign_in_at).getTime();
                 const confirmedAt = new Date(session.user.email_confirmed_at).getTime();
                 const now = Date.now();
                 
-                // Only sign out if the verification just happened (within last 10 seconds)
-                // AND the sign-in happened exactly when the verification did.
-                // This prevents session restoration from being treated as a verification event.
-                if (Math.abs(lastSignIn - confirmedAt) < 2000 && Math.abs(now - confirmedAt) < 10000 && !session.user.user_metadata?.auto_logged_in) {
+                if (Math.abs(lastSignIn - confirmedAt) < 2000 && Math.abs(now - confirmedAt) < 10000) {
                     await supabase.auth.signOut();
                     setUser(null);
                     setProfile(null);
@@ -52,21 +60,34 @@ export const AuthProvider = ({ children }) => {
                 }
             }
 
-            try {
-                setUser(sessionUser);
-                if (sessionUser) {
-                    await fetchProfile(sessionUser.id);
-                } else {
-                    setProfile(null);
+            // Handle session changes
+            setUser(prevUser => {
+                const userChanged = prevUser?.id !== sessionUser?.id;
+                if (userChanged) {
+                    if (sessionUser) {
+                        setIsSyncingProfile(true);
+                        fetchProfile(sessionUser.id).finally(() => {
+                            if (isMounted) setIsSyncingProfile(false);
+                        });
+                    } else {
+                        setProfile(null);
+                        setIsSyncingProfile(false);
+                    }
+                    return sessionUser;
                 }
-            } catch (error) {
-                console.error('Auth state change error:', error);
-            } finally {
+                return prevUser;
+            });
+            
+            // Only stop loading if we aren't waiting for a profile sync
+            if (!isSyncingProfile) {
                 setLoading(false);
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            isMounted = false;
+            subscription.unsubscribe();
+        };
     }, []);
 
     const fetchProfile = async (userId) => {
@@ -235,6 +256,7 @@ export const AuthProvider = ({ children }) => {
             profile, 
             role: profile?.role,
             loading, 
+            isSyncingProfile,
             login, 
             register, 
             resetPassword,

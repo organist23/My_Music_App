@@ -57,13 +57,14 @@ const AdminDashboardScreen = ({ navigation }) => {
             if (Platform.OS === 'android') {
                 NavigationBar.setButtonStyleAsync('light');
             }
-            // Always refresh when focused to catch any bulk changes from settings
-            fetchData();
-        }, [])
+            // Only show major loader if the main music list is empty
+            fetchData(music.length === 0);
+        }, [music.length])
     );
 
     useEffect(() => {
-        fetchData();
+        // We rely on useFocusEffect for the initial load.
+        // We set up real-time subscriptions here once.
 
         // Set up real-time subscription for music deletion/updates
         const musicSubscription = supabase
@@ -95,22 +96,27 @@ const AdminDashboardScreen = ({ navigation }) => {
         };
     }, []);
 
-    // Refresh when active tab changes, but requests are now tracked in real-time
+    // Refresh when active tab changes if data is missing
     useEffect(() => {
-        if (activeTab === 'Music' && music.length === 0) {
+        if (activeTab === 'Music' && music.length === 0 && !loading) {
             fetchMusic();
         }
     }, [activeTab]);
 
-    const fetchData = async () => {
-        setLoading(true);
-        await Promise.all([
-            fetchMusic(),
-            fetchRequests(),
-            fetchUsers()
-        ]);
-        setLoading(false);
-        setRefreshing(false);
+    const fetchData = async (showLoading = true) => {
+        if (showLoading && music.length === 0) setLoading(true);
+        try {
+            await Promise.all([
+                fetchMusic(),
+                fetchRequests(),
+                fetchUsers()
+            ]);
+        } catch (error) {
+            console.error('Admin fetchData error:', error);
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
     };
 
     const onRefresh = useCallback(() => {

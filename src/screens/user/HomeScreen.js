@@ -30,14 +30,15 @@ const HomeScreen = ({ navigation }) => {
             if (Platform.OS === 'android') {
                 NavigationBar.setButtonStyleAsync('light');
             }
-            // Sync data whenever screen comes into focus
-            fetchData();
-        }, [])
+            // Sync data whenever screen comes into focus, but only show loader if empty
+            fetchData(music.length === 0);
+        }, [music.length])
     );
 
     useEffect(() => {
-        fetchData();
-
+        // We rely on useFocusEffect for the initial load to prevent duplicate fetches on mount/focus.
+        // But we still set up the real-time subscription once here.
+        
         // Real-time subscription for music deletions/updates
         const musicSubscription = supabase
             .channel('home_music_sync')
@@ -45,7 +46,7 @@ const HomeScreen = ({ navigation }) => {
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'music' },
                 () => {
-                    fetchData();
+                    fetchData(false); // Silent refresh for sync
                 }
             )
             .subscribe();
@@ -55,9 +56,10 @@ const HomeScreen = ({ navigation }) => {
         };
     }, []);
 
-    const fetchData = async () => {
+    const fetchData = async (showLoading = true) => {
         try {
-            setLoading(true);
+            // Only show the loading indicator if we don't have music data yet
+            if (showLoading && music.length === 0) setLoading(true);
             const [musicRes, permRes, reqRes] = await Promise.all([
                 supabase.from('music').select('*').order('created_at', { ascending: false }),
                 user ? supabase.from('download_permissions').select('music_id').eq('user_id', user.id) : Promise.resolve({ data: [] }),
