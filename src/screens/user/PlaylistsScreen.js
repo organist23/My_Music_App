@@ -22,7 +22,7 @@ const PlaylistsScreen = ({ navigation }) => {
     const [songsRefreshing, setSongsRefreshing] = useState(false);
     
     const { playlists, loading, refreshPlaylists, fetchPlaylistSongs, removeSongFromPlaylist, deletePlaylist } = usePlaylists();
-    const { playTrack, currentTrack, isPlaying, playingFrom, togglePlayPause, loadingTrackId } = usePlayer();
+    const { playTrack, currentTrack, isPlaying, playingFrom, togglePlayPause, loadingTrackId, isBuffering } = usePlayer();
     const { user } = useAuth();
 
     const handlePlaylistPress = async (playlist) => {
@@ -213,7 +213,7 @@ const PlaylistsScreen = ({ navigation }) => {
                             }
                         }}
                     >
-                        {loadingTrackId === item.music.id ? (
+                        {(loadingTrackId === item.music.id || (isCurrentID && isBuffering)) ? (
                             <ActivityIndicator size="small" color="#000" />
                         ) : (
                             <Ionicons 
@@ -643,7 +643,7 @@ const styles = StyleSheet.create({
     },
     songPlayOverlay: {
         position: 'absolute',
-        bottom: 5,
+        bottom: 10,
         right: 5,
         width: 32,
         height: 32,

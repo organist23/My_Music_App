@@ -23,7 +23,10 @@ const HomeScreen = ({ navigation }) => {
     const [pendingRequests, setPendingRequests] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
     const { user } = useAuth();
-    const { playTrack, currentTrack, isPlaying, togglePlayPause, loadingTrackId } = usePlayer();
+    const { 
+        playTrack, currentTrack, isPlaying, togglePlayPause, 
+        loadingTrackId, isBuffering, reconnectIfStalled, syncQueue 
+    } = usePlayer();
 
     useFocusEffect(
         useCallback(() => {
@@ -74,6 +77,15 @@ const HomeScreen = ({ navigation }) => {
             
             const uniqueGenres = ['All', ...new Set(musicRes.data.map(item => item.genre))];
             setGenres(uniqueGenres);
+
+            // Manual Refresh Support: 
+            // 1. Reconnect if playback is stalled (e.g. user refreshed to fix internet)
+            if (refreshing) {
+                reconnectIfStalled();
+            }
+            
+            // 2. Sync the queue if we are playing from the dashboard
+            syncQueue(musicRes.data, { type: 'dashboard' });
         } catch (error) {
             console.error('Fetch error:', error.message);
         } finally {
@@ -197,7 +209,7 @@ const HomeScreen = ({ navigation }) => {
                         style={styles.playOverlay}
                         onPress={() => handleTogglePlay(item)}
                     >
-                        {loadingTrackId === item.id ? (
+                        {(loadingTrackId === item.id || (isCurrent && isBuffering)) ? (
                             <ActivityIndicator size="small" color="#000" />
                         ) : (
                             <Ionicons 
@@ -342,20 +354,24 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 16,
+        fontSize: 20,
         fontWeight: '900',
         color: '#fff',
-        letterSpacing: 1,
+        letterSpacing: 2,
         textAlign: 'center',
         textTransform: 'uppercase',
+        textShadowColor: 'rgba(29, 185, 84, 0.5)',
+        textShadowOffset: { width: 0, height: 0 },
+        textShadowRadius: 10,
     },
     subtitle: {
-        fontSize: 11,
-        fontWeight: '600',
-        color: '#1DB954',
-        marginTop: 2,
+        fontSize: 10,
+        fontWeight: '700',
+        color: '#999',
+        marginTop: 4,
         textAlign: 'center',
-        letterSpacing: 0.5,
+        letterSpacing: 3,
+        textTransform: 'uppercase',
     },
     searchContainer: {
         marginBottom: 15,
@@ -458,7 +474,7 @@ const styles = StyleSheet.create({
     },
     playOverlay: {
         position: 'absolute',
-        bottom: 38,
+        bottom: 15,
         right: 10,
         width: 36,
         height: 36,

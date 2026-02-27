@@ -10,7 +10,7 @@ import PlayingVisualizer from '../../components/PlayingVisualizer';
 
 const FavoritesScreen = ({ navigation }) => {
     const { favorites, loading, refreshFavorites } = useFavorites();
-    const { playTrack, currentTrack, isPlaying, togglePlayPause, loadingTrackId } = usePlayer();
+    const { playTrack, currentTrack, isPlaying, togglePlayPause, loadingTrackId, isBuffering } = usePlayer();
     const [refreshing, setRefreshing] = useState(false);
 
     const onRefresh = useCallback(async () => {
@@ -82,13 +82,13 @@ const FavoritesScreen = ({ navigation }) => {
 
                 </View>
                 <TouchableOpacity style={styles.playBtn} onPress={() => handleTogglePlay(item.music)}>
-                    {loadingTrackId === item.music.id ? (
-                        <ActivityIndicator size="small" color="#fff" />
+                    {(loadingTrackId === item.music.id || (isCurrent && isBuffering)) ? (
+                        <ActivityIndicator size="small" color="#000" />
                     ) : (
                         <Ionicons 
                             name={currentTrack?.id === item.music.id && isPlaying ? 'pause' : 'play'} 
                             size={20} 
-                            color="#fff" 
+                            color="#000" 
                         />
                     )}
                 </TouchableOpacity>

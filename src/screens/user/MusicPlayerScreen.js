@@ -31,7 +31,8 @@ const MusicPlayerScreen = ({ navigation }) => {
         playNext,
         playPrev,
         seek,
-        isLoading
+        isLoading,
+        isBuffering
     } = usePlayer();
     
     const { toggleFavorite, isFavorite } = useFavorites();
@@ -370,7 +371,7 @@ const MusicPlayerScreen = ({ navigation }) => {
                                     <Text style={styles.downloadBtnText}>
                                         {downloading ? `Cancel? ${Math.round(downloadProgress * 100)}%` : 'Download'}
                                     </Text>
-                                    {downloading && <ActivityIndicator size="small" color="#FFFFFF" style={{ marginLeft: 8 }} />}
+                                    {downloading && <ActivityIndicator size="small" color="#000" style={{ marginLeft: 8 }} />}
                                 </View>
                             </TouchableOpacity>
                         ) : requestStatus === 'pending' ? (
@@ -439,7 +440,7 @@ const MusicPlayerScreen = ({ navigation }) => {
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause}>
-                    {isLoading ? (
+                    {(isLoading || isBuffering) ? (
                         <ActivityIndicator size="large" color="#000" />
                     ) : (
                         <Ionicons 

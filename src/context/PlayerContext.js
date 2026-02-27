@@ -26,6 +26,8 @@ export const PlayerProvider = ({ children }) => {
     const shuffledQueueRef = useRef(shuffledQueue);
     const currentIndexRef = useRef(currentIndex);
     const isShuffleRef = useRef(isShuffle);
+    const lastPositionRef = useRef(0);
+    const lastPositionTimeRef = useRef(Date.now());
     const repeatModeRef = useRef(repeatMode);
     const currentTrackRef = useRef(currentTrack);
     const isLoadingRef = useRef(false);
@@ -187,51 +189,69 @@ export const PlayerProvider = ({ children }) => {
         }
 
         if (isLoadingRef.current && isSameTrack && newQueue.length === 0) return;
+        
+        // Spotify UX: Save current position if it's a same-track retry
+        const savedPosition = isSameTrack ? (lastPositionRef.current || 0) : 0;
 
-        try {
-            setIsLoading(true);
-            setLoadingTrackId(track.id);
-            isLoadingRef.current = true;
-            setIsBuffering(true);
-            setCurrentTrack(track);
-            currentTrackRef.current = track;
+        const attemptPlay = async (retryCount = 0) => {
+            try {
+                setIsLoading(true);
+                setLoadingTrackId(track.id);
+                isLoadingRef.current = true;
+                setIsBuffering(true);
+                setCurrentTrack(track);
+                currentTrackRef.current = track;
+                
+                // Reset stall tracker but preserve savedPosition for the new sound
+                lastPositionTimeRef.current = Date.now();
 
-            if (sound) {
-                await sound.unloadAsync().catch(() => {});
-                setSound(null);
-            }
-
-            const { sound: newSound } = await Audio.Sound.createAsync(
-                { uri: track.audio_url },
-                { 
-                    shouldPlay: true, 
-                    isLooping: repeatModeRef.current === 'one',
-                    progressUpdateIntervalMillis: 500
-                },
-                onPlaybackStatusUpdate
-            );
-
-            setSound(newSound);
-            setIsPlaying(true);
-            setIsBuffering(false);
-            
-            // Stall detector: if stuck in loading/buffering for 10s, force skip
-            stallTimeoutRef.current = setTimeout(() => {
-                if (isLoadingRef.current || isBuffering) {
-                    console.warn('Playback stalled for 10s, skipping...');
-                    playNext();
+                if (sound) {
+                    await sound.unloadAsync().catch(() => {});
+                    setSound(null);
                 }
-            }, 10000);
 
-        } catch (error) {
-            console.error('Error in playTrack:', error);
-            setIsBuffering(false);
-            retryTimeoutRef.current = setTimeout(() => playNext(), 2000);
-        } finally {
-            isLoadingRef.current = false;
-            setIsLoading(false);
-            setLoadingTrackId(null);
-        }
+                const { sound: newSound } = await Audio.Sound.createAsync(
+                    { uri: track.audio_url },
+                    { 
+                        shouldPlay: true, 
+                        isLooping: repeatModeRef.current === 'one',
+                        progressUpdateIntervalMillis: 500,
+                        positionMillis: savedPosition // Spotify-like: resume from where it stalled
+                    },
+                    onPlaybackStatusUpdate
+                );
+
+                setSound(newSound);
+                setIsPlaying(true);
+                
+                // We no longer clear isLoading/isBuffering here.
+                // We wait for onPlaybackStatusUpdate to detect actual progress.
+                
+                // Stall detector
+                stallTimeoutRef.current = setTimeout(() => {
+                    if (isLoadingRef.current || isBuffering) {
+                        console.warn('Playback stalled, waiting for connection...');
+                    }
+                }, 10000);
+
+            } catch (error) {
+                // Change console.error to console.log for a friendlier retry experience
+                console.log(`[RECONNECTING] Attempt ${retryCount + 1}:`, error.message || error);
+                setIsBuffering(true); 
+                
+                if (retryCount < 5) { 
+                    retryTimeoutRef.current = setTimeout(() => attemptPlay(retryCount + 1), 3000);
+                } else {
+                    console.error('Max retries reached for track:', track.title);
+                    setIsBuffering(false);
+                    setIsLoading(false);
+                    setLoadingTrackId(null);
+                    isLoadingRef.current = false;
+                }
+            }
+        };
+
+        await attemptPlay();
     };
 
     const playNext = async () => {
@@ -267,26 +287,60 @@ export const PlayerProvider = ({ children }) => {
     const onPlaybackStatusUpdate = (status) => {
         if (!status || !status.isLoaded) {
             if (status?.error) {
-                console.error('Playback monitor error:', status.error);
-                playNext();
+                console.log('[RECONNECTING] Playback monitor error:', status.error);
+                setIsBuffering(true);
+            }
+            
+            // If we are supposed to be playing but the sound unloaded (fatal connection drop)
+            if (currentTrackRef.current && isPlaying && !isLoadingRef.current) {
+                console.log('[RECONNECTING] Sound object unloaded unexpectedly, restarting...');
+                playTrack(currentTrackRef.current);
             }
             return;
         }
 
-        // Clear stall timeout if we are making progress
-        if (status.isPlaying && !status.isBuffering) {
-            if (stallTimeoutRef.current) {
-                clearTimeout(stallTimeoutRef.current);
-                stallTimeoutRef.current = null;
+        // Manual stall detection: if position hasn't changed for 1.5s while supposed to be playing
+        if (status.isPlaying) {
+            if (status.positionMillis !== lastPositionRef.current) {
+                lastPositionRef.current = status.positionMillis;
+                lastPositionTimeRef.current = Date.now();
+                
+                // Spotify UX: Proactively hide loader as soon as any progress is made
+                if (isLoadingRef.current) {
+                    setIsLoading(false);
+                    isLoadingRef.current = false;
+                    setLoadingTrackId(null);
+                }
+                
+                if (isBuffering) {
+                    setIsBuffering(false);
+                }
+            } else if (status.positionMillis < (status.durationMillis - 100)) { // Not at the very end
+                const timeStalled = Date.now() - lastPositionTimeRef.current;
+                if (timeStalled > 1500 && !status.isBuffering) {
+                    setIsBuffering(true);
+                }
             }
+        } else {
+            // Reset stall tracker when paused or stopped
+            lastPositionRef.current = status.positionMillis;
+            lastPositionTimeRef.current = Date.now();
         }
 
         setPosition(status.positionMillis);
         setDuration(status.durationMillis);
-        if (!status.isBuffering) setIsPlaying(status.isPlaying);
-        setIsBuffering(status.isBuffering);
         
-        if (status.didJustFinish && !status.isLooping) playNext();
+        // Final buffering state based on official status and our manual detection
+        const effectiveBuffering = status.isBuffering || (status.isPlaying && status.positionMillis === lastPositionRef.current && (Date.now() - lastPositionTimeRef.current > 1500));
+        setIsBuffering(effectiveBuffering);
+
+        if (!effectiveBuffering) {
+            setIsPlaying(status.isPlaying);
+        }
+
+        if (status.didJustFinish && !status.isLooping) {
+            playNext();
+        }
     };
 
     const togglePlayPause = async () => {
@@ -298,12 +352,46 @@ export const PlayerProvider = ({ children }) => {
                     await sound.pauseAsync();
                     setIsPlaying(false);
                 } else {
+                    // Show loader immediately if resuming, in case of connection lag
+                    setIsBuffering(true);
+                    
+                    // Reset stall tracker to prevent "double loading"
+                    lastPositionRef.current = status.positionMillis;
+                    lastPositionTimeRef.current = Date.now();
+                    
                     await sound.playAsync();
                     setIsPlaying(true);
                 }
             }
         } catch (e) {
             console.error('Toggle play/pause error:', e);
+        }
+    };
+
+    const syncQueue = (newList, context = null) => {
+        if (!newList || newList.length === 0) return;
+        
+        // Only sync if the context matches (e.g. we are playing from the dashboard we just refreshed)
+        if (context && playingFrom?.type === context.type && playingFrom?.id === context.id) {
+            updateQueue(newList);
+            
+            // Re-map the current index to the new list
+            if (currentTrackRef.current) {
+                const newSource = isShuffleRef.current ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : newList) : newList;
+                const newIndex = newSource.findIndex(t => t.id === currentTrackRef.current.id);
+                if (newIndex !== -1) {
+                    updateCurrentIndex(newIndex);
+                }
+            }
+        }
+    };
+
+    const reconnectIfStalled = () => {
+        // If we are currently "connecting" or "buffering" and the user manually refreshes the UI,
+        // it's a good time to force a fresh connection attempt since internet is likely back.
+        if ((isLoadingRef.current || isBuffering) && currentTrackRef.current) {
+            console.log('[RECONNECTING] Manual refresh detected, force-restarting stalled track...');
+            playTrack(currentTrackRef.current);
         }
     };
 
@@ -320,7 +408,7 @@ export const PlayerProvider = ({ children }) => {
             repeatMode, isShuffle, toggleRepeat, toggleShuffle,
             playNext, playPrev, playTrack, togglePlayPause, seek,
             queue, currentIndex, playingFrom, loadingTrackId, isLoading,
-            stopPlayback
+            stopPlayback, reconnectIfStalled, syncQueue
         }}>
             {children}
         </PlayerContext.Provider>

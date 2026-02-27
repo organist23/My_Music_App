@@ -19,7 +19,10 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 const AdminDashboardScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { openMenu, refreshStorageUsage } = useMenu();
-    const { playTrack, currentTrack, isPlaying, togglePlayPause, loadingTrackId } = usePlayer();
+    const { 
+        playTrack, currentTrack, isPlaying, togglePlayPause, 
+        loadingTrackId, isBuffering, reconnectIfStalled, syncQueue 
+    } = usePlayer();
     const [activeTab, setActiveTab] = useState('Music'); // 'Music' or 'Requests'
     const [music, setMusic] = useState([]);
     const [genres, setGenres] = useState(['All']);
@@ -138,6 +141,14 @@ const AdminDashboardScreen = ({ navigation }) => {
             }
             
             setMusic(data || []);
+            
+            // Sync the queue if we are playing from the admin dashboard context
+            syncQueue(data || [], { type: 'admin_dashboard' });
+            
+            // If the user manually pulled to refresh, try to reconnect any stalled audio
+            if (refreshing) {
+                reconnectIfStalled();
+            }
             
             const uniqueGenres = ['All', ...new Set((data || []).map(item => item.genre))];
             setGenres(uniqueGenres);
@@ -412,7 +423,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                         style={styles.playOverlay}
                         onPress={() => handleTogglePlay(item)}
                     >
-                        {loadingTrackId === item.id ? (
+                        {(loadingTrackId === item.id || (isCurrent && isBuffering)) ? (
                             <ActivityIndicator size="small" color="#000" />
                         ) : (
                             <Ionicons 
@@ -959,7 +970,7 @@ const styles = StyleSheet.create({
     },
     playOverlay: {
         position: 'absolute',
-        bottom: 38,
+        bottom: 15,
         right: 8,
         width: 32,
         height: 32,
