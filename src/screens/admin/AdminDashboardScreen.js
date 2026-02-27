@@ -29,7 +29,6 @@ const AdminDashboardScreen = ({ navigation }) => {
     const [selectedGenre, setSelectedGenre] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [requests, setRequests] = useState([]);
-    const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const skeletonOpacity = useRef(new Animated.Value(0.3)).current;
@@ -111,8 +110,7 @@ const AdminDashboardScreen = ({ navigation }) => {
         try {
             await Promise.all([
                 fetchMusic(),
-                fetchRequests(),
-                fetchUsers()
+                fetchRequests()
             ]);
         } catch (error) {
             console.error('Admin fetchData error:', error);
@@ -174,21 +172,6 @@ const AdminDashboardScreen = ({ navigation }) => {
             setRequests(data);
         } catch (error) {
             Alert.alert('Error', error.message);
-        }
-    };
-
-    const fetchUsers = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('role', 'user')
-                .order('created_at', { ascending: false });
-
-            if (error) throw error;
-            setUsers(data || []);
-        } catch (error) {
-            console.error('Error fetching users:', error);
         }
     };
 
@@ -439,22 +422,6 @@ const AdminDashboardScreen = ({ navigation }) => {
         );
     };
 
-    const renderUserItem = ({ item }) => (
-        <View style={styles.requestItem}>
-            <View style={[styles.requestCover, { backgroundColor: '#1DB954', justifyContent: 'center', alignItems: 'center' }]}>
-                <Ionicons name="person" size={24} color="#000" />
-            </View>
-            <View style={styles.requestInfo}>
-                <Text style={styles.requestUser}>{item.full_name}</Text>
-                <Text style={styles.requestSong}>{item.email}</Text>
-                <Text style={styles.requestDate}>Joined: {formatDate(item.created_at)}</Text>
-            </View>
-            <View style={[styles.statusBadge, styles.approvedBadge, { paddingHorizontal: 10 }]}>
-                <Text style={[styles.statusText, { color: '#1DB954', fontSize: 14 }]}>PIN: {item.recovery_pin || 'N/A'}</Text>
-            </View>
-        </View>
-    );
-
     const renderRequestItem = ({ item }) => (
         <View style={styles.requestItem}>
             <Image source={{ uri: item.music?.cover_url }} style={styles.requestCover} />
@@ -499,13 +466,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                              item.artist.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesGenre = selectedGenre === 'All' || item.genre === selectedGenre;
         return matchesSearch && matchesGenre;
-    });
-
-    const filteredUsers = users.filter(user => {
-        const query = searchQuery.toLowerCase();
-        return (user.full_name?.toLowerCase().includes(query) || 
-                user.email?.toLowerCase().includes(query)) && 
-                user.role === 'user';
     });
 
     const renderGenreItem = ({ item }) => (
@@ -565,13 +525,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                     </View>
                     <Text style={[styles.tabText, activeTab === 'Requests' && styles.activeTabText]}>Requests</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                    style={[styles.tab, activeTab === 'Users' && styles.activeTab]}
-                    onPress={() => setActiveTab('Users')}
-                >
-                    <Ionicons name="people-outline" size={18} color={activeTab === 'Users' ? '#1DB954' : '#666'} />
-                    <Text style={[styles.tabText, activeTab === 'Users' && styles.activeTabText]}>Users</Text>
-                </TouchableOpacity>
             </View>
 
             {!loading && (
@@ -601,24 +554,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                                 showsHorizontalScrollIndicator={false}
                                 contentContainerStyle={styles.compactGenreList}
                             />
-                        </View>
-                    ) : activeTab === 'Users' ? (
-                        <View style={styles.filterSection}>
-                            <View style={styles.searchBox}>
-                                <Ionicons name="search-outline" size={16} color="#666" style={styles.searchIcon} />
-                                <TextInput
-                                    style={styles.compactSearchInput}
-                                    placeholder="Search users..."
-                                    placeholderTextColor="#666"
-                                    value={searchQuery}
-                                    onChangeText={setSearchQuery}
-                                />
-                                {searchQuery.length > 0 && (
-                                    <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                        <Ionicons name="close-circle" size={16} color="#666" />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
                         </View>
                     ) : (
                         requests.length > 0 && (
@@ -686,7 +621,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                         />
                     }
                 />
-            ) : activeTab === 'Requests' ? (
+            ) : (
                 <FlatList
                     key="requests_list_admin"
                     style={{ flex: 1 }}
@@ -702,32 +637,6 @@ const AdminDashboardScreen = ({ navigation }) => {
                             <Ionicons name="notifications-off-outline" size={60} color="#282828" />
                             <Text style={styles.emptyText}>Nothing here yet.</Text>
                             <Text style={styles.emptySubtext}>You're all caught up with user requests.</Text>
-                        </View>
-                    }
-                    refreshControl={
-                        <RefreshControl
-                            refreshing={refreshing}
-                            onRefresh={onRefresh}
-                            tintColor="#1DB954"
-                            colors={["#1DB954"]}
-                        />
-                    }
-                />
-            ) : (
-                <FlatList
-                    key="users_list_admin"
-                    style={{ flex: 1 }}
-                    data={filteredUsers}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderUserItem}
-                    numColumns={1}
-                    contentContainerStyle={styles.list}
-                    showsVerticalScrollIndicator={true}
-                    ListEmptyComponent={
-                        <View style={styles.emptyContainer}>
-                            <Ionicons name="people-outline" size={60} color="#282828" />
-                            <Text style={styles.emptyText}>{searchQuery ? "No matches found." : "No users found."}</Text>
-                            <Text style={styles.emptySubtext}>{searchQuery ? "Try a different search term." : "Wait for users to join your app."}</Text>
                         </View>
                     }
                     refreshControl={

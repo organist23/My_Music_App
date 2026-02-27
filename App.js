@@ -7,6 +7,7 @@ import { PlayerProvider } from './src/context/PlayerContext';
 import { FavoritesProvider } from './src/context/FavoritesContext';
 import { PlaylistProvider } from './src/context/PlaylistContext';
 import { MenuProvider } from './src/context/MenuContext';
+import { ChatProvider } from './src/context/ChatContext';
 import * as SystemUI from 'expo-system-ui';
 import * as NavigationBar from 'expo-navigation-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -39,10 +40,12 @@ export default function App() {
           <FavoritesProvider>
             <PlaylistProvider>
               <PlayerProvider>
-                <View style={styles.container}>
-                  <RootNavigator />
-                  <StatusBar style="light" />
-                </View>
+                <ChatProvider>
+                  <View style={styles.container}>
+                    <RootNavigator />
+                    <StatusBar style="light" />
+                  </View>
+                </ChatProvider>
               </PlayerProvider>
             </PlaylistProvider>
           </FavoritesProvider>

@@ -233,7 +233,7 @@ const HomeScreen = ({ navigation }) => {
                         style={styles.menuButton} 
                         onPress={openMenu}
                     >
-                        <Ionicons name="menu-outline" size={28} color="#fff" />
+                        <Ionicons name="menu-outline" size={22} color="#fff" />
                     </TouchableOpacity>
                     <View style={styles.exploreTextContainer}>
                         <Text style={styles.title}>Keiphil Guimba</Text>
@@ -313,12 +313,13 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
     },
     header: {
-        marginBottom: 12,
+        marginBottom: 8,
     },
     exploreCard: {
         backgroundColor: '#1E1E1E',
         borderRadius: 12,
-        padding: 10,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -333,10 +334,10 @@ const styles = StyleSheet.create({
     menuButton: {
         position: 'absolute',
         left: 10,
-        width: 36,
-        height: 36,
+        width: 32,
+        height: 32,
         backgroundColor: '#282828',
-        borderRadius: 18,
+        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 10,
@@ -344,9 +345,9 @@ const styles = StyleSheet.create({
     headerLogo: {
         position: 'absolute',
         right: 10,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 32,
+        height: 32,
+        borderRadius: 16,
         borderWidth: 1.5,
         borderColor: '#1DB954',
     },
@@ -365,16 +366,16 @@ const styles = StyleSheet.create({
         textShadowRadius: 10,
     },
     subtitle: {
-        fontSize: 10,
-        fontWeight: '700',
+        fontSize: 14,
+        fontStyle: 'italic',
+        fontWeight: 'normal',
         color: '#999',
-        marginTop: 4,
+        marginTop: 2,
         textAlign: 'center',
-        letterSpacing: 3,
-        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     searchContainer: {
-        marginBottom: 15,
+        marginBottom: 10,
     },
     searchInput: {
         backgroundColor: '#1E1E1E',
@@ -387,17 +388,17 @@ const styles = StyleSheet.create({
         borderColor: '#333',
     },
     genreCarouselContainer: {
-        marginBottom: 20,
+        marginBottom: 12,
     },
     genreList: {
         paddingRight: 20,
     },
     genreChip: {
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-        borderRadius: 20,
+        paddingHorizontal: 15,
+        paddingVertical: 7,
+        borderRadius: 14,
         backgroundColor: '#1E1E1E',
-        marginRight: 10,
+        marginRight: 8,
         borderWidth: 1,
         borderColor: '#333',
     },
@@ -407,7 +408,7 @@ const styles = StyleSheet.create({
     },
     genreText: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 13,
         fontWeight: '600',
     },
     activeGenreText: {

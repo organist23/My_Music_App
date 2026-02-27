@@ -121,6 +121,7 @@ const LoginScreen = ({ navigation }) => {
                             </TouchableOpacity>
 
                             <Text style={styles.copyrightText}>© 2026 Keiphil Guimba</Text>
+                            <Text style={styles.versionText}>v4.1.2</Text>
                         </View>
                     </ScrollView>
                 </View>
@@ -276,6 +277,15 @@ const styles = StyleSheet.create({
         fontSize: 12,
         marginTop: 30,
         textAlign: 'center',
+    },
+    versionText: {
+        color: '#444',
+        fontSize: 10,
+        marginTop: 6,
+        textAlign: 'center',
+        fontWeight: 'bold',
+        letterSpacing: 1,
+        textTransform: 'uppercase',
     },
 });
 

@@ -198,13 +198,11 @@ export const PlayerProvider = ({ children }) => {
                 setIsLoading(true);
                 setLoadingTrackId(track.id);
                 isLoadingRef.current = true;
-                setIsBuffering(true);
+                // Don't set isBuffering here to avoid flickering; 
+                // onPlaybackStatusUpdate will handle it.
                 setCurrentTrack(track);
                 currentTrackRef.current = track;
                 
-                // Reset stall tracker but preserve savedPosition for the new sound
-                lastPositionTimeRef.current = Date.now();
-
                 if (sound) {
                     await sound.unloadAsync().catch(() => {});
                     setSound(null);
@@ -216,13 +214,15 @@ export const PlayerProvider = ({ children }) => {
                         shouldPlay: true, 
                         isLooping: repeatModeRef.current === 'one',
                         progressUpdateIntervalMillis: 500,
-                        positionMillis: savedPosition // Spotify-like: resume from where it stalled
+                        positionMillis: savedPosition
                     },
                     onPlaybackStatusUpdate
                 );
 
                 setSound(newSound);
-                setIsPlaying(true);
+                lastPositionRef.current = savedPosition; 
+                lastPositionTimeRef.current = Date.now();
+                // isPlaying will be updated by onPlaybackStatusUpdate
                 
                 // We no longer clear isLoading/isBuffering here.
                 // We wait for onPlaybackStatusUpdate to detect actual progress.
@@ -299,68 +299,75 @@ export const PlayerProvider = ({ children }) => {
             return;
         }
 
-        // Manual stall detection: if position hasn't changed for 1.5s while supposed to be playing
+        // Initial Load Cleanup: If we get any valid status, the "Initial Load" is over
+        if (isLoadingRef.current) {
+            setIsLoading(false);
+            isLoadingRef.current = false;
+            setLoadingTrackId(null);
+        }
+
+        // SYNC POSITION
+        setPosition(status.positionMillis);
+        setDuration(status.durationMillis);
+
+        // STALL DETECTION
         if (status.isPlaying) {
-            if (status.positionMillis !== lastPositionRef.current) {
-                lastPositionRef.current = status.positionMillis;
-                lastPositionTimeRef.current = Date.now();
-                
-                // Spotify UX: Proactively hide loader as soon as any progress is made
-                if (isLoadingRef.current) {
-                    setIsLoading(false);
-                    isLoadingRef.current = false;
-                    setLoadingTrackId(null);
-                }
-                
-                if (isBuffering) {
-                    setIsBuffering(false);
-                }
-            } else if (status.positionMillis < (status.durationMillis - 100)) { // Not at the very end
-                const timeStalled = Date.now() - lastPositionTimeRef.current;
-                if (timeStalled > 1500 && !status.isBuffering) {
-                    setIsBuffering(true);
-                }
-            }
-        } else {
-            // Reset stall tracker when paused or stopped
             lastPositionRef.current = status.positionMillis;
+            lastPositionTimeRef.current = Date.now();
+        } else {
+            // Keep the timer fresh when paused/stopped
             lastPositionTimeRef.current = Date.now();
         }
 
-        setPosition(status.positionMillis);
-        setDuration(status.durationMillis);
+        // BUFFERING LOGIC (The "Hear it, See it" Fix)
+        // If the music is actually playing (audible), we hide the loader immediately.
+        // We only show "buffering/loading" if it ISN'T playing but wants to.
         
-        // Final buffering state based on official status and our manual detection
-        const effectiveBuffering = status.isBuffering || (status.isPlaying && status.positionMillis === lastPositionRef.current && (Date.now() - lastPositionTimeRef.current > 1500));
-        setIsBuffering(effectiveBuffering);
+        let effectiveBuffering = status.isBuffering || (status.shouldPlay && !status.isPlaying);
 
-        if (!effectiveBuffering) {
-            setIsPlaying(status.isPlaying);
+        // Spotify UX: 
+        // 1. If we are audibly playing, hide loader.
+        // 2. If the user has explicitly paused (shouldPlay is false), hide loader.
+        if (status.isPlaying || !status.shouldPlay) {
+            effectiveBuffering = false;
         }
 
+        setIsBuffering(effectiveBuffering);
+        setIsPlaying(status.isPlaying);
+
+        // Auto-play next track
         if (status.didJustFinish && !status.isLooping) {
             playNext();
         }
     };
 
     const togglePlayPause = async () => {
-        if (!sound) return;
+        if (!sound) {
+            // Cancel loading logic (Spotify UX)
+            if (isLoadingRef.current) {
+                console.log('Cancelling track load attempt...');
+                setIsLoading(false);
+                isLoadingRef.current = false;
+                setLoadingTrackId(null);
+                setIsBuffering(false);
+                setIsPlaying(false);
+                if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+            }
+            return;
+        }
         try {
             const status = await sound.getStatusAsync();
             if (status.isLoaded) {
                 if (status.isPlaying) {
                     await sound.pauseAsync();
                     setIsPlaying(false);
+                    setIsBuffering(false);
                 } else {
-                    // Show loader immediately if resuming, in case of connection lag
-                    setIsBuffering(true);
-                    
-                    // Reset stall tracker to prevent "double loading"
-                    lastPositionRef.current = status.positionMillis;
+                    // Force-clear any previous stall state when resuming
                     lastPositionTimeRef.current = Date.now();
+                    setIsBuffering(false);
                     
                     await sound.playAsync();
-                    setIsPlaying(true);
                 }
             }
         } catch (e) {
