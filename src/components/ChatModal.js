@@ -454,8 +454,8 @@ const ChatModal = ({ visible, onClose }) => {
                     // Conversation View
                     <KeyboardAvoidingView 
                         style={styles.chatArea} 
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : insets.top + 20}
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : 0}
                     >
                         {messages.some(m => m.is_pinned) && (
                             <View style={styles.pinnedHeader}>
