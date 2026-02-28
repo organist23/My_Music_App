@@ -20,6 +20,7 @@ export const PlayerProvider = ({ children }) => {
     const [playingFrom, setPlayingFrom] = useState(null); // { type: 'playlist' | 'dashboard' | 'favorites', id: string | null }
     const [loadingTrackId, setLoadingTrackId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [sleepSeconds, setSleepSeconds] = useState(0); // 0 means off
 
     // Refs to avoid stale closures in onPlaybackStatusUpdate
     const queueRef = useRef(queue);
@@ -73,6 +74,30 @@ export const PlayerProvider = ({ children }) => {
             }
         };
     }, [sound]);
+
+    // Sleep Timer Countdown
+    useEffect(() => {
+        let timer;
+        if (sleepSeconds > 0 && isPlaying) {
+            timer = setInterval(() => {
+                setSleepSeconds(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timer);
+                        // Stop music when timer ends
+                        if (sound) {
+                            sound.pauseAsync().catch(() => {});
+                            setIsPlaying(false);
+                        }
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+        return () => {
+            if (timer) clearInterval(timer);
+        };
+    }, [sleepSeconds, isPlaying, sound]);
 
     const shuffleArray = (array) => {
         const shuffled = [...array];
@@ -208,6 +233,7 @@ export const PlayerProvider = ({ children }) => {
                 // onPlaybackStatusUpdate will handle it.
                 setCurrentTrack(track);
                 currentTrackRef.current = track;
+                setIsPlaying(false); // Stop monitor from thinking it's an unexpected unload
                 
                 if (sound) {
                     await sound.unloadAsync().catch(() => {});
@@ -322,7 +348,12 @@ export const PlayerProvider = ({ children }) => {
             // If we are supposed to be playing but the sound unloaded (fatal connection drop)
             if (currentTrackRef.current && isPlaying && !isLoadingRef.current) {
                 console.log('[RECONNECTING] Sound object unloaded unexpectedly, restarting...');
+                setIsPlaying(false); // Prevent infinite loop before next play attempt
                 playTrack(currentTrackRef.current);
+            } else {
+                // If it unloads and we weren't expecting it (and not in loading state),
+                // make sure we stop showing as "playing"
+                setIsPlaying(false);
             }
             return;
         }
@@ -463,7 +494,8 @@ export const PlayerProvider = ({ children }) => {
             repeatMode, isShuffle, toggleRepeat, toggleShuffle,
             playNext, playPrev, playTrack, togglePlayPause, seek,
             queue, currentIndex, playingFrom, loadingTrackId, isLoading,
-            stopPlayback, reconnectIfStalled, syncQueue
+            stopPlayback, reconnectIfStalled, syncQueue,
+            sleepSeconds, setSleepSeconds
         }}>
             {children}
         </PlayerContext.Provider>

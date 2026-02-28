@@ -32,7 +32,9 @@ const MusicPlayerScreen = ({ navigation }) => {
         playPrev,
         seek,
         isLoading,
-        isBuffering
+        isBuffering,
+        sleepSeconds,
+        setSleepSeconds
     } = usePlayer();
     
     const { toggleFavorite, isFavorite } = useFavorites();
@@ -42,6 +44,7 @@ const MusicPlayerScreen = ({ navigation }) => {
     const [checkingStatus, setCheckingStatus] = useState(false);
     const [downloading, setDownloading] = useState(false);
     const [downloadProgress, setDownloadProgress] = useState(0);
+    const [sleepModalVisible, setSleepModalVisible] = useState(false);
 
     // Ensure dark navigation bar on Android
     useFocusEffect(
@@ -317,19 +320,23 @@ const MusicPlayerScreen = ({ navigation }) => {
     };
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 20) + 100 }]}>
             <View style={[styles.header, { paddingTop: insets.top + 15 }]}>
-                <TouchableOpacity style={styles.headerSpacer} onPress={() => seek(0)}>
-                    <Ionicons name="refresh-outline" size={24} color="#aaa" />
+                <TouchableOpacity style={styles.headerSpacer} onPress={() => navigation.goBack()}>
+                    <Ionicons name="chevron-down" size={30} color="#fff" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Now Playing</Text>
-                {role !== 'admin' ? (
-                    <TouchableOpacity style={styles.moreBtn} onPress={() => setPlaylistModalVisible(true)}>
-                        <Text style={styles.moreBtnText}>≡+</Text>
-                    </TouchableOpacity>
-                ) : (
-                    <View style={styles.headerSpacer} />
-                )}
+                <View style={styles.headerTitleContainer}>
+                    <Text style={styles.headerTitle}>Now Playing</Text>
+                    {sleepSeconds > 0 && (
+                        <View style={styles.timerBadge}>
+                            <Ionicons name="moon" size={12} color="#1DB954" />
+                            <Text style={styles.timerBadgeText}>
+                                {Math.floor(sleepSeconds / 60)}:{(sleepSeconds % 60).toString().padStart(2, '0')}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+                <View style={styles.headerSpacer} />
             </View>
 
             <View style={[styles.coverContainer, { marginTop: 15 }]}>
@@ -351,55 +358,58 @@ const MusicPlayerScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.info}>
-                <Text style={styles.title} numberOfLines={1}>{currentTrack.title}</Text>
-                <Text style={styles.artist}>{currentTrack.artist}</Text>
-                
-                {role !== 'admin' && (
-                    <View style={styles.requestContainer}>
-                        {requestStatus === 'approved' ? (
-                            <TouchableOpacity 
-                                style={[styles.downloadBtn, downloading && styles.downloadingBtn]} 
-                                onPress={handleDownload}
-                                activeOpacity={0.7}
-                            >
-                                <View style={styles.downloadBtnContent}>
-                                    <Ionicons 
-                                        name={downloading ? "cloud-download" : "download-outline"} 
-                                        size={20} 
-                                        color="#FFFFFF" 
-                                    />
-                                    <Text style={styles.downloadBtnText}>
-                                        {downloading ? `Cancel? ${Math.round(downloadProgress * 100)}%` : 'Download'}
-                                    </Text>
-                                    {downloading && <ActivityIndicator size="small" color="#000" style={{ marginLeft: 8 }} />}
-                                </View>
-                            </TouchableOpacity>
-                        ) : requestStatus === 'pending' ? (
-                            <View style={styles.pendingRow}>
-                                <View style={styles.pendingBadge}>
-                                    <Ionicons name="time-outline" size={16} color="#1DB954" />
-                                    <Text style={styles.pendingText}>Request Pending</Text>
-                                </View>
+                <View style={styles.titleRow}>
+                    <View style={styles.titleInfo}>
+                        <Text style={styles.title} numberOfLines={1}>{currentTrack.title}</Text>
+                        <Text style={styles.artist} numberOfLines={1}>
+                            {currentTrack.artist} • <Text style={styles.genreText}>{currentTrack.genre || 'Music'}</Text>
+                        </Text>
+                    </View>
+                    
+                    {role !== 'admin' && (
+                        <View style={styles.actionSection}>
+                            {requestStatus === 'approved' ? (
+                                <TouchableOpacity 
+                                    style={[styles.downloadBtn, downloading && styles.downloadingBtn]} 
+                                    onPress={handleDownload}
+                                    activeOpacity={0.7}
+                                >
+                                    <View style={styles.downloadBtnContent}>
+                                        <Ionicons 
+                                            name={downloading ? "cloud-download" : "download-outline"} 
+                                            size={16} 
+                                            color="#FFFFFF" 
+                                        />
+                                        <Text style={styles.downloadBtnText}>
+                                            {downloading ? `${Math.round(downloadProgress * 100)}%` : 'Download'}
+                                        </Text>
+                                        {downloading && <ActivityIndicator size="small" color="#fff" style={{ marginLeft: 5 }} />}
+                                    </View>
+                                </TouchableOpacity>
+                            ) : requestStatus === 'pending' ? (
                                 <TouchableOpacity 
                                     style={styles.undoBtn} 
                                     onPress={handleUndoRequest}
                                     disabled={checkingStatus}
                                 >
-                                    <Text style={styles.undoBtnText}>Undo</Text>
+                                    <View style={styles.undoBtnContent}>
+                                        <Ionicons name="time-outline" size={16} color="#1DB954" />
+                                        <Text style={styles.undoBtnText}>Undo</Text>
+                                    </View>
                                 </TouchableOpacity>
-                            </View>
-                        ) : (
-                            <TouchableOpacity 
-                                style={styles.requestBtn} 
-                                onPress={handleRequestDownload}
-                                disabled={checkingStatus}
-                            >
-                                <Ionicons name="cloud-download-outline" size={18} color="#aaa" />
-                                <Text style={styles.requestBtnText}>Request Download</Text>
-                            </TouchableOpacity>
-                        )}
-                    </View>
-                )}
+                            ) : (
+                                <TouchableOpacity 
+                                    style={styles.requestBtn} 
+                                    onPress={handleRequestDownload}
+                                    disabled={checkingStatus}
+                                >
+                                    <Ionicons name="cloud-download-outline" size={16} color="#aaa" />
+                                    <Text style={styles.requestBtnText}>Request</Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    )}
+                </View>
             </View>
 
             <View style={styles.progressSection}>
@@ -421,56 +431,89 @@ const MusicPlayerScreen = ({ navigation }) => {
                     <Text style={styles.timeText}>{formatTime(position)}</Text>
                     <Text style={styles.timeText}>{formatTime(duration)}</Text>
                 </View>
+                {role !== 'admin' && (
+                    <View style={styles.timerRow}>
+                        <TouchableOpacity style={styles.timerIconButton} onPress={() => setSleepModalVisible(true)}>
+                            <Ionicons 
+                                name={sleepSeconds > 0 ? "moon" : "moon-outline"} 
+                                size={22} 
+                                color={sleepSeconds > 0 ? "#1DB954" : "#666"} 
+                            />
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
 
             <View style={styles.controls}>
-                <TouchableOpacity style={styles.sideBtn} onPress={toggleShuffle}>
-                    <View style={styles.controlWithBadge}>
-                        <Ionicons 
-                            name="shuffle" 
-                            size={28} 
-                            color={isShuffle ? '#1DB954' : '#666'} 
-                        />
-                        {isShuffle && <View style={styles.activeDot} />}
-                    </View>
-                </TouchableOpacity>
+                <View style={styles.controlSlot}>
+                    <TouchableOpacity onPress={toggleShuffle}>
+                        <View style={styles.controlWithBadge}>
+                            <Ionicons 
+                                name="shuffle" 
+                                size={26} 
+                                color={isShuffle ? '#1DB954' : '#666'} 
+                            />
+                            {isShuffle && <View style={styles.activeDot} />}
+                        </View>
+                    </TouchableOpacity>
+                </View>
 
-                <TouchableOpacity style={styles.secondaryBtn} onPress={playPrev}>
-                    <Ionicons name="play-skip-back" size={38} color="#fff" />
-                </TouchableOpacity>
+                <View style={styles.controlSlot}>
+                    <TouchableOpacity onPress={playPrev}>
+                        <Ionicons name="play-skip-back" size={32} color="#fff" />
+                    </TouchableOpacity>
+                </View>
 
-                <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause}>
-                    {(isLoading || isBuffering) ? (
-                        <ActivityIndicator size="large" color="#000" />
-                    ) : (
-                        <Ionicons 
-                            name={isPlaying ? 'pause' : 'play'} 
-                            size={42} 
-                            color="#000" 
-                            style={!isPlaying && { marginLeft: 4 }} 
-                        />
-                    )}
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.secondaryBtn} onPress={playNext}>
-                    <Ionicons name="play-skip-forward" size={38} color="#fff" />
-                </TouchableOpacity>
-
-                <TouchableOpacity style={styles.sideBtn} onPress={toggleRepeat}>
-                    <View style={styles.controlWithBadge}>
-                        <Ionicons 
-                            name="repeat" 
-                            size={28} 
-                            color={repeatMode === 'none' ? '#666' : '#1DB954'} 
-                        />
-                        {repeatMode !== 'none' && <View style={styles.activeDot} />}
-                        {repeatMode === 'one' && (
-                            <View style={styles.repeatBadge}>
-                                <Text style={styles.repeatBadgeText}>1</Text>
-                            </View>
+                <View style={[styles.controlSlot, { flex: 1.5 }]}>
+                    <TouchableOpacity style={styles.mainPlayBtn} onPress={togglePlayPause}>
+                        {(isLoading || isBuffering) ? (
+                            <ActivityIndicator size="large" color="#000" />
+                        ) : (
+                            <Ionicons 
+                                name={isPlaying ? 'pause' : 'play'} 
+                                size={40} 
+                                color="#000" 
+                                style={!isPlaying && { marginLeft: 4 }} 
+                            />
                         )}
-                    </View>
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.controlSlot}>
+                    <TouchableOpacity onPress={playNext}>
+                        <Ionicons name="play-skip-forward" size={32} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+
+                <View style={styles.controlSlot}>
+                    <TouchableOpacity onPress={toggleRepeat}>
+                        <View style={styles.controlWithBadge}>
+                            <Ionicons 
+                                name="repeat" 
+                                size={26} 
+                                color={repeatMode === 'none' ? '#666' : '#1DB954'} 
+                            />
+                            {repeatMode !== 'none' && <View style={styles.activeDot} />}
+                            {repeatMode === 'one' && (
+                                <View style={styles.repeatBadge}>
+                                    <Text style={styles.repeatBadgeText}>1</Text>
+                                </View>
+                            )}
+                        </View>
+                    </TouchableOpacity>
+                </View>
+            </View>
+
+            <View style={styles.footerActions}>
+                <TouchableOpacity style={styles.footerBtn} onPress={() => seek(0)}>
+                    <Ionicons name="refresh-outline" size={22} color="#aaa" />
                 </TouchableOpacity>
+
+                {role !== 'admin' && (
+                    <TouchableOpacity style={styles.footerBtn} onPress={() => setPlaylistModalVisible(true)}>
+                        <Text style={styles.footerMoreBtnText}>≡+</Text>
+                    </TouchableOpacity>
+                )}
             </View>
 
             <Modal
@@ -509,6 +552,47 @@ const MusicPlayerScreen = ({ navigation }) => {
                     </View>
                 </View>
             </Modal>
+
+            {/* Sleep Timer Modal */}
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={sleepModalVisible}
+                onRequestClose={() => setSleepModalVisible(false)}
+            >
+                <TouchableOpacity 
+                    style={styles.modalOverlay} 
+                    activeOpacity={1} 
+                    onPress={() => setSleepModalVisible(false)}
+                >
+                    <View style={styles.timerModalContent}>
+                        <Text style={styles.modalTitle}>Sleep timer</Text>
+                        <View style={styles.timerOptions}>
+                            {[5, 10, 15, 30, 45, 60].map(mins => (
+                                <TouchableOpacity 
+                                    key={mins}
+                                    style={styles.timerOption}
+                                    onPress={() => {
+                                        setSleepSeconds(mins * 60);
+                                        setSleepModalVisible(false);
+                                    }}
+                                >
+                                    <Text style={styles.timerOptionText}>{mins === 60 ? '1hr' : `${mins} minutes`}</Text>
+                                </TouchableOpacity>
+                            ))}
+                            <TouchableOpacity 
+                                style={[styles.timerOption, { borderBottomWidth: 0 }]}
+                                onPress={() => {
+                                    setSleepSeconds(0);
+                                    setSleepModalVisible(false);
+                                }}
+                            >
+                                <Text style={[styles.timerOptionText, { color: '#ff4444' }]}>Turn off timer</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </View>
     );
 };
@@ -532,12 +616,44 @@ const styles = StyleSheet.create({
         width: 40,
         alignItems: 'center',
     },
+    headerTitleContainer: {
+        alignItems: 'center',
+    },
     headerTitle: {
         color: '#fff',
-        fontSize: 14,
+        fontSize: 12,
         fontWeight: 'bold',
         textTransform: 'uppercase',
         letterSpacing: 1,
+    },
+    footerActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginTop: 20,
+        width: '100%',
+    },
+    footerBtn: {
+        padding: 5,
+    },
+    footerMoreBtnText: {
+        color: '#aaa',
+        fontSize: 22,
+    },
+    timerBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(29, 185, 84, 0.1)',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 10,
+        marginTop: 4,
+    },
+    timerBadgeText: {
+        color: '#1DB954',
+        fontSize: 10,
+        fontWeight: 'bold',
+        marginLeft: 4,
     },
     moreBtnText: {
         color: '#fff',
@@ -546,7 +662,7 @@ const styles = StyleSheet.create({
     coverContainer: {
         width: '100%',
         aspectRatio: 1,
-        marginTop: 30,
+        marginTop: 10,
         borderRadius: 20,
         overflow: 'hidden',
         elevation: 10,
@@ -561,21 +677,91 @@ const styles = StyleSheet.create({
         backgroundColor: '#333',
     },
     info: {
-        marginTop: 30,
+        marginTop: 10,
         width: '100%',
+    },
+    titleRow: {
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+    },
+    titleInfo: {
+        flex: 1,
+        marginRight: 10,
     },
     title: {
         color: '#fff',
-        fontSize: 26,
+        fontSize: 22,
         fontWeight: 'bold',
-        textAlign: 'center',
     },
     artist: {
         color: '#aaa',
-        fontSize: 18,
-        marginTop: 5,
-        textAlign: 'center',
+        fontSize: 14,
+        marginTop: 2,
+    },
+    genreText: {
+        color: '#1DB954',
+        fontWeight: 'bold',
+        fontSize: 12,
+    },
+    actionSection: {
+        marginLeft: 10,
+    },
+    downloadBtn: {
+        backgroundColor: '#1DB954',
+        borderRadius: 20,
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+    },
+    downloadBtnContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    downloadBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginLeft: 6,
+    },
+    downloadingBtn: {
+        backgroundColor: '#282828',
+        borderWidth: 1,
+        borderColor: '#1DB954',
+    },
+    requestBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#282828',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    requestBtnText: {
+        color: '#aaa',
+        fontSize: 14,
+        marginLeft: 6,
+        fontWeight: '600',
+    },
+    undoBtn: {
+        backgroundColor: '#282828',
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#1DB954',
+    },
+    undoBtnContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    undoBtnText: {
+        color: '#fff',
+        fontSize: 14,
+        fontWeight: 'bold',
+        marginLeft: 6,
     },
     requestContainer: {
         marginTop: 15,
@@ -686,7 +872,7 @@ const styles = StyleSheet.create({
         shadowRadius: 5,
     },
     progressSection: {
-        marginTop: 35,
+        marginTop: 15,
         width: '100%',
     },
     progressBarContainer: {
@@ -725,13 +911,25 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
     },
+    timerRow: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        marginTop: 0,
+        paddingRight: 5,
+    },
+    timerIconButton: {
+        padding: 8,
+    },
     controls: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        marginTop: 40,
-        paddingHorizontal: 0,
+        marginTop: 10,
         width: '100%',
+    },
+    controlSlot: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     sideBtn: {
         padding: 5,
@@ -795,6 +993,29 @@ const styles = StyleSheet.create({
     closeModalText: {
         color: '#fff',
         fontSize: 22,
+    },
+    timerModalContent: {
+        backgroundColor: '#282828',
+        width: width * 0.8,
+        borderRadius: 20,
+        padding: 20,
+        alignItems: 'center',
+    },
+    timerOptions: {
+        width: '100%',
+        marginTop: 20,
+    },
+    timerOption: {
+        paddingVertical: 15,
+        width: '100%',
+        alignItems: 'center',
+        borderBottomWidth: 1,
+        borderBottomColor: '#333',
+    },
+    timerOptionText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '500',
     },
     playlistItem: {
         flexDirection: 'row',
