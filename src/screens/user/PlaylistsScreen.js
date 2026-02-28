@@ -278,7 +278,7 @@ const PlaylistsScreen = ({ navigation }) => {
         return (
             <ScrollView 
                 style={{ flex: 1 }}
-                contentContainerStyle={styles.list}
+                contentContainerStyle={[styles.list, currentTrack && { paddingBottom: 150 }]}
                 refreshControl={
                     <RefreshControl
                         refreshing={songsRefreshing}
@@ -395,7 +395,7 @@ const PlaylistsScreen = ({ navigation }) => {
                     data={playlists}
                     keyExtractor={(item) => item.id}
                     renderItem={renderPlaylist}
-                    contentContainerStyle={styles.list}
+                    contentContainerStyle={[styles.list, currentTrack && { paddingBottom: 150 }]}
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>

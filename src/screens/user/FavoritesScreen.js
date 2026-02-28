@@ -116,7 +116,7 @@ const FavoritesScreen = ({ navigation }) => {
                     data={favorites}
                     keyExtractor={(item) => item.id}
                     renderItem={renderItem}
-                    contentContainerStyle={styles.list}
+                    contentContainerStyle={[styles.list, currentTrack && { paddingBottom: 150 }]}
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>

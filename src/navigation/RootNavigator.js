@@ -113,9 +113,21 @@ const UserTabs = () => {
     );
 };
 
+import MiniPlayer from '../components/MiniPlayer';
+
+const getActiveRouteName = (state) => {
+    if (!state) return null;
+    const route = state.routes[state.index];
+    if (route.state) {
+        return getActiveRouteName(route.state);
+    }
+    return route.name;
+};
+
 const RootNavigator = () => {
     const { user, role, loading, isSyncingProfile } = useAuth();
     const { menuVisible, closeMenu } = useMenu();
+    const [currentRouteName, setCurrentRouteName] = useState(null);
 
     // Show loading spinner if:
     // 1. Initial auth check is happening (loading)
@@ -129,7 +141,13 @@ const RootNavigator = () => {
     }
 
     return (
-        <NavigationContainer theme={MyTheme}>
+        <NavigationContainer 
+            theme={MyTheme}
+            onStateChange={(state) => {
+                const name = getActiveRouteName(state);
+                setCurrentRouteName(name);
+            }}
+        >
             <View style={{ flex: 1 }}>
                 <Stack.Navigator screenOptions={{ headerShown: false }}>
                     {!user ? (
@@ -154,6 +172,7 @@ const RootNavigator = () => {
                         </>
                     )}
                 </Stack.Navigator>
+                {user && role !== 'admin' && <MiniPlayer currentRouteName={currentRouteName} />}
                 {user && <MenuModal visible={menuVisible} onClose={closeMenu} />}
             </View>
         </NavigationContainer>

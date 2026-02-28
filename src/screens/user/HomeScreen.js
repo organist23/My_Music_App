@@ -290,7 +290,7 @@ const HomeScreen = ({ navigation }) => {
                     renderItem={renderItem}
                     numColumns={2}
                     columnWrapperStyle={styles.row}
-                    contentContainerStyle={styles.list}
+                    contentContainerStyle={[styles.list, currentTrack && { paddingBottom: 80 }]}
                     showsVerticalScrollIndicator={false}
                     ListEmptyComponent={<Text style={styles.emptyText}>No music found.</Text>}
                     refreshControl={
