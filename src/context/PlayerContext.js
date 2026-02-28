@@ -363,9 +363,24 @@ export const PlayerProvider = ({ children }) => {
         setIsBuffering(effectiveBuffering);
         setIsPlaying(status.isPlaying);
 
-        // Auto-play next track
+        // Auto-play next track logic
         if (status.didJustFinish && !status.isLooping) {
-            playNext();
+            // Dashboard Single-Play Fix:
+            // If we are on Home/Dashboard and not in shuffle/repeat, STOP instead of playing next.
+            const isDashboardContext = playingFrom?.type === 'dashboard' || playingFrom?.type === 'admin_dashboard';
+            if (isDashboardContext && repeatModeRef.current === 'none' && !isShuffleRef.current) {
+                // We don't call playNext here, we just ensure UI is reset
+                // (playNext logic was slightly redundant here since we stop)
+                if (sound) {
+                    sound.stopAsync().catch(() => {});
+                    sound.setPositionAsync(0).catch(() => {});
+                }
+                setPosition(0);
+                setIsPlaying(false);
+                setIsBuffering(false);
+            } else {
+                playNext();
+            }
         }
     };
 

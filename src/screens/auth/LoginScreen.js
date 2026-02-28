@@ -121,7 +121,7 @@ const LoginScreen = ({ navigation }) => {
                             </TouchableOpacity>
 
                             <Text style={styles.copyrightText}>© 2026 Keiphil Guimba</Text>
-                            <Text style={styles.versionText}>v4.1.3</Text>
+                            <Text style={styles.versionText}>v4.1.4</Text>
                         </View>
                     </ScrollView>
                 </View>
