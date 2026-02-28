@@ -227,13 +227,14 @@ const HomeScreen = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
+            <View style={[styles.header, { paddingTop: insets.top + 5 }]}>
                 <View style={styles.exploreCard}>
                     <TouchableOpacity 
                         style={styles.menuButton} 
                         onPress={openMenu}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     >
-                        <Ionicons name="menu-outline" size={22} color="#fff" />
+                        <Ionicons name="menu-outline" size={26} color="#fff" />
                     </TouchableOpacity>
                     <View style={styles.exploreTextContainer}>
                         <Text style={styles.title}>Keiphil Guimba</Text>
@@ -317,8 +318,9 @@ const styles = StyleSheet.create({
     },
     exploreCard: {
         backgroundColor: '#1E1E1E',
-        borderRadius: 12,
-        paddingVertical: 6,
+        borderRadius: 10,
+        paddingVertical: 12,
+        minHeight: 50,
         paddingHorizontal: 10,
         flexDirection: 'row',
         alignItems: 'center',
@@ -334,10 +336,10 @@ const styles = StyleSheet.create({
     menuButton: {
         position: 'absolute',
         left: 10,
-        width: 32,
-        height: 32,
+        width: 34,
+        height: 34,
         backgroundColor: '#282828',
-        borderRadius: 16,
+        borderRadius: 17,
         justifyContent: 'center',
         alignItems: 'center',
         zIndex: 10,
@@ -345,9 +347,10 @@ const styles = StyleSheet.create({
     headerLogo: {
         position: 'absolute',
         right: 10,
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        zIndex: 10,
         borderWidth: 1.5,
         borderColor: '#1DB954',
     },
@@ -355,7 +358,7 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     title: {
-        fontSize: 20,
+        fontSize: 16,
         fontWeight: '900',
         color: '#fff',
         letterSpacing: 2,
@@ -366,29 +369,29 @@ const styles = StyleSheet.create({
         textShadowRadius: 10,
     },
     subtitle: {
-        fontSize: 14,
+        fontSize: 11,
         fontStyle: 'italic',
         fontWeight: 'normal',
         color: '#999',
-        marginTop: 2,
+        marginTop: 0,
         textAlign: 'center',
         letterSpacing: 1,
     },
     searchContainer: {
-        marginBottom: 10,
+        marginBottom: 8,
     },
     searchInput: {
         backgroundColor: '#1E1E1E',
         color: '#fff',
         paddingHorizontal: 15,
-        paddingVertical: 8,
-        borderRadius: 20,
+        paddingVertical: 6,
+        borderRadius: 18,
         fontSize: 13,
         borderWidth: 1,
         borderColor: '#333',
     },
     genreCarouselContainer: {
-        marginBottom: 12,
+        marginBottom: 10,
     },
     genreList: {
         paddingRight: 20,

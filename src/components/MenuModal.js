@@ -8,6 +8,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useChat } from '../context/ChatContext';
 import ChatModal from './ChatModal';
 import UserManagementModal from './UserManagementModal';
+import ProfileModal from './ProfileModal';
 
 const { width } = Dimensions.get('window');
 
@@ -26,6 +27,7 @@ const MenuModal = ({ visible, onClose }) => {
     const [isPinVisible, setIsPinVisible] = React.useState(false);
     const [isChatVisible, setIsChatVisible] = React.useState(false);
     const [isUserManagementVisible, setIsUserManagementVisible] = React.useState(false);
+    const [isProfileVisible, setIsProfileVisible] = React.useState(false);
     const [showAbout, setShowAbout] = React.useState(false);
     const slideAnim = React.useRef(new Animated.Value(-width)).current;
 
@@ -141,7 +143,7 @@ const MenuModal = ({ visible, onClose }) => {
                             showsVerticalScrollIndicator={false}
                         >
                             <View style={styles.menuItems}>
-                                <TouchableOpacity style={styles.menuItem} onPress={onClose}>
+                                <TouchableOpacity style={styles.menuItem} onPress={() => setIsProfileVisible(true)}>
                                     <Ionicons name="person-outline" size={22} color="#fff" />
                                     <Text style={styles.menuText}>View Profile</Text>
                                 </TouchableOpacity>
@@ -285,7 +287,7 @@ const MenuModal = ({ visible, onClose }) => {
                         </TouchableOpacity>
 
                         <View style={styles.versionContainer}>
-                            <Text style={styles.versionText}>Version 4.1.2</Text>
+                            <Text style={styles.versionText}>Version 4.1.3</Text>
                         </View>
                     </View>
                 </Animated.View>
@@ -299,6 +301,15 @@ const MenuModal = ({ visible, onClose }) => {
             <UserManagementModal
                 visible={isUserManagementVisible}
                 onClose={() => setIsUserManagementVisible(false)}
+            />
+
+            <ProfileModal
+                visible={isProfileVisible}
+                onClose={() => setIsProfileVisible(false)}
+                onSecurityUpdate={() => {
+                    setIsProfileVisible(false);
+                    onClose(); // Closes the Side Menu
+                }}
             />
         </Modal>
     );

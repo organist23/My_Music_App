@@ -223,6 +223,40 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const updateProfile = async (updates) => {
+        try {
+            setLoading(true);
+
+            const { data: { session } } = await supabase.auth.getSession();
+            const { full_name, email, recovery_pin, password } = updates;
+
+            // Use Edge Function to update both auth email, password and profile with Service Role to bypass email confirmation
+            const invokeResponse = await supabase.functions.invoke('update-user-profile', {
+                body: { full_name, email, recovery_pin, password },
+                headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+
+            if (invokeResponse.error) {
+                let errorMessage = invokeResponse.error.message;
+                if (invokeResponse.error.context && typeof invokeResponse.error.context.json === 'function') {
+                    const body = await invokeResponse.error.context.json();
+                    if (body && body.error) errorMessage = body.error;
+                }
+                throw new Error(errorMessage);
+            }
+
+            // Refresh local profile state
+            await fetchProfile(user.id);
+
+            return { error: null };
+        } catch (error) {
+            console.error('Update profile error:', error.message);
+            return { error };
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const logout = async () => {
         try {
             setLoading(true);
@@ -260,6 +294,7 @@ export const AuthProvider = ({ children }) => {
             login, 
             register, 
             resetPassword,
+            updateProfile,
             logout 
         }}>
             {children}

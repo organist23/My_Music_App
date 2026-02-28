@@ -35,6 +35,7 @@ const ChatModal = ({ visible, onClose }) => {
     const [showActionModal, setShowActionModal] = useState(false);
     const [selectedInboxUser, setSelectedInboxUser] = useState(null);
     const [showInboxActionModal, setShowInboxActionModal] = useState(false);
+    const [searchQueryInbox, setSearchQueryInbox] = useState('');
     const flatListRef = useRef(null);
 
     const isAdmin = profile?.role === 'admin';
@@ -401,25 +402,60 @@ const ChatModal = ({ visible, onClose }) => {
                     </View>
                 </View>
 
+                {isAdmin && !activeChatUser && (
+                    <View style={styles.inboxSearchContainer}>
+                        <View style={styles.inboxSearchBox}>
+                            <Ionicons name="search-outline" size={18} color="#666" style={styles.searchIcon} />
+                            <TextInput
+                                style={styles.inboxSearchInput}
+                                placeholder="Search by name or email..."
+                                placeholderTextColor="#666"
+                                value={searchQueryInbox}
+                                onChangeText={setSearchQueryInbox}
+                                autoCapitalize="none"
+                            />
+                            {searchQueryInbox.length > 0 && (
+                                <TouchableOpacity onPress={() => setSearchQueryInbox('')}>
+                                    <Ionicons name="close-circle" size={18} color="#666" />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+                )}
+
                 {isAdmin && !activeChatUser ? (
-                    // Inbox View for Admin
-                    <FlatList
-                        data={inbox}
-                        keyExtractor={item => item.id}
-                        renderItem={renderInboxItem}
-                        style={styles.messageList}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Ionicons name="chatbubbles-outline" size={64} color="#333" />
-                                <Text style={styles.emptyText}>No messages yet.</Text>
-                            </View>
-                        }
-                    />
+                    (() => {
+                        const filteredInbox = inbox.filter(item => {
+                            const query = searchQueryInbox.toLowerCase();
+                            return (
+                                item.full_name?.toLowerCase().includes(query) ||
+                                item.email?.toLowerCase().includes(query)
+                            );
+                        });
+
+                        return (
+                            <FlatList
+                                data={filteredInbox}
+                                keyExtractor={item => item.id}
+                                renderItem={renderInboxItem}
+                                style={styles.messageList}
+                                ListEmptyComponent={
+                                    <View style={styles.emptyContainer}>
+                                        <Ionicons name="chatbubbles-outline" size={64} color="#333" />
+                                        <Text style={styles.emptyText}>
+                                            {searchQueryInbox ? "No users found." : "No messages yet."}
+                                        </Text>
+                                    </View>
+                                }
+                            />
+                        );
+                    })()
                 ) : (
                     // Conversation View
                     <KeyboardAvoidingView 
                         style={styles.chatArea} 
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : 0}
                     >
                         {messages.some(m => m.is_pinned) && (
                             <View style={styles.pinnedHeader}>
@@ -483,7 +519,7 @@ const ChatModal = ({ visible, onClose }) => {
                             }}
                         />
                         
-                        <View style={[styles.inputWrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+                        <View style={[styles.inputWrapper, { paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 10) : 10 }]}>
                             <View style={styles.inputOuter}>
                                 {!isAdmin && (
                                     <TouchableOpacity 
@@ -1237,6 +1273,32 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 12,
         fontWeight: 'bold',
+    },
+    inboxSearchContainer: {
+        paddingHorizontal: 15,
+        paddingBottom: 10,
+        backgroundColor: '#121212',
+        borderBottomWidth: 1,
+        borderBottomColor: '#1F1F1F',
+    },
+    inboxSearchBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1A1A1A',
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        height: 40,
+        borderWidth: 1,
+        borderColor: '#333',
+    },
+    searchIcon: {
+        marginRight: 8,
+    },
+    inboxSearchInput: {
+        flex: 1,
+        color: '#fff',
+        fontSize: 14,
+        padding: 0,
     },
 });
 

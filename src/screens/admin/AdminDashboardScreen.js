@@ -485,14 +485,17 @@ const AdminDashboardScreen = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <View style={[styles.header, { paddingTop: insets.top + 10, paddingHorizontal: 15 }]}>
+            <View style={[styles.header, { paddingTop: insets.top + 5, paddingHorizontal: 15 }]}>
                 <View style={styles.exploreCard}>
-                    <TouchableOpacity style={styles.menuButton} onPress={openMenu}>
-                        <Ionicons name="menu-outline" size={28} color="#fff" />
+                    <TouchableOpacity 
+                        style={styles.menuButton} 
+                        onPress={openMenu}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                        <Ionicons name="menu-outline" size={26} color="#fff" />
                     </TouchableOpacity>
                     <View style={styles.exploreTextContainer}>
                         <Text style={styles.title}>Admin Panel</Text>
-                        <Text style={styles.subtitle}>Control Center</Text>
                     </View>
                     <Image 
                         source={require('../../../logo/login.png')} 
@@ -666,12 +669,14 @@ const styles = StyleSheet.create({
         backgroundColor: '#121212',
     },
     header: {
-        marginBottom: 12,
+        marginBottom: 10,
     },
     exploreCard: {
         backgroundColor: '#1E1E1E',
         borderRadius: 12,
-        padding: 10,
+        paddingVertical: 12,
+        minHeight: 50,
+        paddingHorizontal: 10,
         flexDirection: 'row',
         alignItems: 'center',
         borderWidth: 1,
@@ -681,34 +686,42 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.2,
         shadowRadius: 3,
+        justifyContent: 'center',
     },
     menuButton: {
-        width: 36,
-        height: 36,
+        position: 'absolute',
+        left: 10,
+        width: 34,
+        height: 34,
         backgroundColor: '#282828',
-        borderRadius: 18,
+        borderRadius: 17,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
+        zIndex: 10,
     },
     exploreTextContainer: {
         flex: 1,
     },
     title: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: 'bold',
         color: '#fff',
         letterSpacing: 0.5,
+        textAlign: 'center',
     },
     subtitle: {
-        fontSize: 12,
+        fontSize: 10,
         fontWeight: '500',
         color: '#1DB954',
+        textAlign: 'center',
     },
     headerLogo: {
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        position: 'absolute',
+        right: 10,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        zIndex: 10,
         borderWidth: 1.5,
         borderColor: '#1DB954',
     },
@@ -723,7 +736,7 @@ const styles = StyleSheet.create({
     },
     tabBar: {
         flexDirection: 'row',
-        marginBottom: 10,
+        marginBottom: 8,
     },
     filterSection: {
         paddingHorizontal: 15,
@@ -735,10 +748,10 @@ const styles = StyleSheet.create({
         backgroundColor: '#1E1E1E',
         borderRadius: 10,
         paddingHorizontal: 12,
-        height: 36,
+        height: 32,
         borderWidth: 1,
         borderColor: '#282828',
-        marginBottom: 8,
+        marginBottom: 6,
     },
     searchIcon: {
         marginRight: 8,
@@ -778,7 +791,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 8,
+        paddingVertical: 7,
         backgroundColor: '#1E1E1E',
         borderRadius: 10,
         marginHorizontal: 5,
