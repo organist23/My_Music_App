@@ -454,8 +454,8 @@ const ChatModal = ({ visible, onClose }) => {
                     // Conversation View
                     <KeyboardAvoidingView 
                         style={styles.chatArea} 
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : 0}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : insets.top + 20}
                     >
                         {messages.some(m => m.is_pinned) && (
                             <View style={styles.pinnedHeader}>
@@ -519,7 +519,7 @@ const ChatModal = ({ visible, onClose }) => {
                             }}
                         />
                         
-                        <View style={[styles.inputWrapper, { paddingBottom: Platform.OS === 'ios' ? Math.max(insets.bottom, 10) : 10 }]}>
+                        <View style={[styles.inputWrapper, { paddingBottom: Math.max(insets.bottom, 15) }]}>
                             <View style={styles.inputOuter}>
                                 {!isAdmin && (
                                     <TouchableOpacity 
