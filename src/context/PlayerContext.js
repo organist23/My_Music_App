@@ -16,7 +16,7 @@ export const PlayerProvider = ({ children }) => {
     const [shuffledQueue, setShuffledQueue] = useState([]);
     const [currentIndex, setCurrentIndex] = useState(-1);
     const [isShuffle, setIsShuffle] = useState(false);
-    const [repeatMode, setRepeatMode] = useState('all'); // 'none', 'all', 'one'
+    const [repeatMode, setRepeatMode] = useState('none'); // 'none', 'all', 'one'
     const [playingFrom, setPlayingFrom] = useState(null); // { type: 'playlist' | 'dashboard' | 'favorites', id: string | null }
     const [loadingTrackId, setLoadingTrackId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -183,7 +183,13 @@ export const PlayerProvider = ({ children }) => {
         if (isSameTrack && sound && isContextMatch) {
             try {
                 const status = await sound.getStatusAsync();
-                if (status.isLoaded && !status.isPlaying) await sound.playAsync();
+                if (status.isLoaded) {
+                    // Spotify/Premium logic: If track is finished or at very end, restart it
+                    if (status.didJustFinish || status.positionMillis >= status.durationMillis - 100) {
+                        await sound.setPositionAsync(0);
+                    }
+                    if (!status.isPlaying) await sound.playAsync();
+                }
             } catch (e) {}
             return;
         }
@@ -255,25 +261,47 @@ export const PlayerProvider = ({ children }) => {
     };
 
     const playNext = async () => {
-        const sourceQueue = isShuffleRef.current ? shuffledQueueRef.current : queueRef.current;
+        const sourceQueue = isShuffleRef.current ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : queueRef.current) : queueRef.current;
         if (sourceQueue.length === 0) return;
         
-        const isLast = currentIndexRef.current === sourceQueue.length - 1;
+        // Safety: ensure current index is within bounds
+        const currentIdx = Math.max(0, Math.min(currentIndexRef.current, sourceQueue.length - 1));
+        const isLast = currentIdx === sourceQueue.length - 1;
+
         if (isLast) {
-            if (repeatModeRef.current === 'none') {
-                setIsPlaying(false);
+            // Priority: If Repeat-One is on, loop the same track (handled by expo-av, but safety here)
+            if (repeatModeRef.current === 'one') {
+                if (sound) await sound.setPositionAsync(0).catch(() => {});
                 return;
             }
-            if (isShuffleRef.current) {
-                const reshuffled = shuffleArray(queueRef.current);
-                updateShuffledQueue(reshuffled);
-                await playTrack(reshuffled[0]);
+
+            // If Repeat-All or Shuffle is on, we continue playback
+            if (repeatModeRef.current === 'all' || isShuffleRef.current) {
+                if (isShuffleRef.current) {
+                    const reshuffled = shuffleArray(queueRef.current);
+                    updateShuffledQueue(reshuffled);
+                    await playTrack(reshuffled[0]);
+                } else {
+                    await playTrack(sourceQueue[0]);
+                }
                 return;
             }
+
+            // Otherwise (repeatMode === 'none' and no shuffle), we STOP at the end
+            if (sound) {
+                await sound.stopAsync().catch(() => {});
+                await sound.setPositionAsync(0).catch(() => {});
+            }
+            setPosition(0);
+            setIsPlaying(false);
+            setIsBuffering(false);
+            return;
         }
 
-        const nextIndex = (currentIndexRef.current + 1) % sourceQueue.length;
-        await playTrack(sourceQueue[nextIndex]);
+        const nextIndex = currentIdx + 1;
+        if (nextIndex < sourceQueue.length) {
+            await playTrack(sourceQueue[nextIndex]);
+        }
     };
 
     const playPrev = async () => {
@@ -363,6 +391,11 @@ export const PlayerProvider = ({ children }) => {
                     setIsPlaying(false);
                     setIsBuffering(false);
                 } else {
+                    // UX Fix: If track is at the end, restart it
+                    if (status.didJustFinish || status.positionMillis >= status.durationMillis - 100) {
+                        await sound.setPositionAsync(0);
+                    }
+                    
                     // Force-clear any previous stall state when resuming
                     lastPositionTimeRef.current = Date.now();
                     setIsBuffering(false);
