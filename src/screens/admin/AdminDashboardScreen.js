@@ -31,6 +31,7 @@ const AdminDashboardScreen = ({ navigation }) => {
     const [requests, setRequests] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    const [pendingDeletions, setPendingDeletions] = useState(new Set());
     const skeletonOpacity = useRef(new Animated.Value(0.3)).current;
 
     useEffect(() => {
@@ -138,10 +139,12 @@ const AdminDashboardScreen = ({ navigation }) => {
                 LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
             }
             
-            setMusic(data || []);
+            // Filter out items that are currently being deleted
+            const filteredData = (data || []).filter(item => !pendingDeletions.has(item.id));
+            setMusic(filteredData);
             
             // Sync the queue if we are playing from the admin dashboard context
-            syncQueue(data || [], { type: 'admin_dashboard' });
+            syncQueue(filteredData, { type: 'admin_dashboard' });
             
             // If the user manually pulled to refresh, try to reconnect any stalled audio
             if (refreshing) {
@@ -201,6 +204,9 @@ const AdminDashboardScreen = ({ navigation }) => {
                     style: "destructive", 
                     onPress: async () => {
                         try {
+                            // Track deletion ID to prevent reappearing during sync
+                            setPendingDeletions(prev => new Set(prev).add(id));
+
                             // Optimistic UI update with animation
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                             setMusic(prev => prev.filter(m => m.id !== id));
@@ -217,6 +223,12 @@ const AdminDashboardScreen = ({ navigation }) => {
                             // 2. Delete from DB
                             const { error: dbError } = await supabase.from('music').delete().eq('id', id);
                             if (dbError) {
+                                // If error, remove from pending and revert UI
+                                setPendingDeletions(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(id);
+                                    return next;
+                                });
                                 fetchMusic(true);
                                 throw dbError;
                             }
@@ -235,8 +247,24 @@ const AdminDashboardScreen = ({ navigation }) => {
                             }
 
                             await refreshStorageUsage();
+
+                            // Keep in pendingDeletions for a short grace period (3 seconds) 
+                            // to ensure real-time triggers don't fetch it back too early
+                            setTimeout(() => {
+                                setPendingDeletions(prev => {
+                                    const next = new Set(prev);
+                                    next.delete(id);
+                                    return next;
+                                });
+                            }, 3000);
+
                         } catch (error) {
                             Alert.alert('Error', error.message);
+                            setPendingDeletions(prev => {
+                                const next = new Set(prev);
+                                next.delete(id);
+                                return next;
+                            });
                             fetchMusic(true);
                         }
                     } 
