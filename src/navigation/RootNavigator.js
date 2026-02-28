@@ -12,8 +12,8 @@ const MyTheme = {
     ...DarkTheme,
     colors: {
         ...DarkTheme.colors,
-        background: '#121212',
-        card: '#121212',
+        background: '#000000',
+        card: '#000000',
     },
 };
 
@@ -48,7 +48,7 @@ const AuthStack = () => (
 
 const AdminStack = () => (
     <Stack.Navigator screenOptions={{ 
-        headerStyle: { backgroundColor: '#121212' },
+        headerStyle: { backgroundColor: '#000000' },
         headerTintColor: '#fff',
         headerTitleStyle: { fontWeight: 'bold' },
     }}>
@@ -65,10 +65,10 @@ const UserTabs = () => {
     
     return (
         <Tab.Navigator screenOptions={({ route }) => ({
-            headerStyle: { backgroundColor: '#121212' },
+            headerStyle: { backgroundColor: '#000000' },
             headerTintColor: '#fff',
             tabBarStyle: { 
-                backgroundColor: '#121212', 
+                backgroundColor: '#000000', 
                 borderTopColor: '#333',
                 paddingTop: 4,
                 height: 50 + insets.bottom,
@@ -122,7 +122,7 @@ const RootNavigator = () => {
     // 2. We have a user but don't know their role yet (isSyncingProfile && !role)
     if (loading || (user && !role && isSyncingProfile)) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212' }}>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000000' }}>
                 <ActivityIndicator size="large" color="#1DB954" />
             </View>
         );
@@ -148,7 +148,7 @@ const RootNavigator = () => {
                                 options={{ 
                                     presentation: 'modal',
                                     animation: 'slide_from_bottom',
-                                    contentStyle: { backgroundColor: '#121212' }
+                                    contentStyle: { backgroundColor: '#000000' }
                                 }} 
                             />
                         </>

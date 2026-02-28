@@ -516,7 +516,7 @@ const MusicPlayerScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         paddingHorizontal: 25,
     },
     header: {
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         borderWidth: 1,
-        borderColor: '#121212',
+        borderColor: '#000000',
     },
     repeatBadgeText: {
         color: '#000',

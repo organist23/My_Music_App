@@ -732,7 +732,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         paddingHorizontal: 4,
         height: 50,
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         borderBottomWidth: 1,
         borderBottomColor: '#1F1F1F',
     },
@@ -832,7 +832,7 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     inputWrapper: {
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         borderTopWidth: 1,
         borderTopColor: '#1F1F1F',
         paddingTop: 12,
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         padding: 16,
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         marginBottom: 1,
     },
     inboxAvatar: {
@@ -1074,7 +1074,7 @@ const styles = StyleSheet.create({
         borderBottomColor: '#1F1F1F',
     },
     pinnedTag: {
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         paddingHorizontal: 14,
         paddingVertical: 8,
         borderRadius: 20,
@@ -1140,7 +1140,7 @@ const styles = StyleSheet.create({
         justifyContent: 'flex-end',
     },
     pickerContent: {
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         borderTopLeftRadius: 25,
         borderTopRightRadius: 25,
         height: '70%',
@@ -1277,7 +1277,7 @@ const styles = StyleSheet.create({
     inboxSearchContainer: {
         paddingHorizontal: 15,
         paddingBottom: 10,
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         borderBottomWidth: 1,
         borderBottomColor: '#1F1F1F',
     },

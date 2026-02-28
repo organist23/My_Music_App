@@ -666,7 +666,7 @@ const AdminDashboardScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
     },
     header: {
         marginBottom: 10,
@@ -822,7 +822,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         paddingHorizontal: 4,
         borderWidth: 1.5,
-        borderColor: '#121212',
+        borderColor: '#000000',
     },
     notifText: {
         color: '#fff',

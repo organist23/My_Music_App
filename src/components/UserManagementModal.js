@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     userItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         borderRadius: 12,
         padding: 15,
         marginBottom: 12,

@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 12,
         borderWidth: 3,
-        borderColor: '#121212',
+        borderColor: '#000000',
         shadowColor: '#1DB954',
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.3,
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
         textTransform: 'uppercase',
     },
     form: {
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         borderRadius: 20,
         padding: 20,
         borderWidth: 1,

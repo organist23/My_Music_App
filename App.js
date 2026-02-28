@@ -24,7 +24,7 @@ export default function App() {
           await NavigationBar.setVisibilityAsync('visible');
           // Note: setBackgroundColorAsync and setPositionAsync are handled by edgeToEdgeEnabled: true in app.json
           // but we can set SystemUI background for consistency in some views
-          await SystemUI.setBackgroundColorAsync('#121212');
+          await SystemUI.setBackgroundColorAsync('#000000');
         } catch (e) {
           console.log('NavigationBar setup error:', e);
         }
@@ -58,7 +58,7 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#000000',
   },
 });
 

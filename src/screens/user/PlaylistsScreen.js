@@ -449,18 +449,18 @@ const PlaylistsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
     },
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingTop: 50,
-        paddingHorizontal: 20,
+        paddingHorizontal: 15,
         paddingBottom: 20,
     },
     headerTitle: {
-        fontSize: 28,
+        fontSize: 22,
         fontWeight: 'bold',
         color: '#fff',
     },

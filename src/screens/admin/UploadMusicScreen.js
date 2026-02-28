@@ -340,7 +340,7 @@ const uploadFile = async (file, bucket, progressWeight, progressOffset, attempt 
 const styles = StyleSheet.create({
     container: {
         flexGrow: 1,
-        backgroundColor: '#121212',
+        backgroundColor: '#000000',
         padding: 20,
     },
     inputContainer: {
