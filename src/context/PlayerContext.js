@@ -82,7 +82,7 @@ export const PlayerProvider = ({ children }) => {
         };
     }, [sound]);
 
-    // Sleep Timer UI Sync Countdown
+    // Sleep Timer UI Sync Countdown (Keep for foreground visual only)
     useEffect(() => {
         let timer;
         if (sleepSeconds > 0 && isPlaying) {
@@ -92,9 +92,7 @@ export const PlayerProvider = ({ children }) => {
                 
                 if (remaining <= 0) {
                     clearInterval(timer);
-                    // Background safety handles the actual stopping, but we cleanup here too
                     sleepEndTimeRef.current = null;
-                    setIsPlaying(false);
                 }
             }, 1000);
         }
@@ -452,6 +450,17 @@ export const PlayerProvider = ({ children }) => {
         if (status.didJustFinish && !status.isLooping) {
             // Ensure we clear isPlaying briefly only if queue is empty (handled in playNext)
             playNext();
+        }
+
+        // SLEEP TIMER BACKGROUND TERMINATE (Robust fix)
+        if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current && status.isPlaying) {
+            console.log('[SLEEP] Timer expired, stopping music...');
+            sleepEndTimeRef.current = null;
+            setSleepSecondsState(0);
+            if (soundRef.current) {
+                soundRef.current.pauseAsync().catch(() => {});
+            }
+            setIsPlaying(false);
         }
     };
 
