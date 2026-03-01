@@ -20,7 +20,8 @@ export const PlayerProvider = ({ children }) => {
     const [playingFrom, setPlayingFrom] = useState(null); // { type: 'playlist' | 'dashboard' | 'favorites', id: string | null }
     const [loadingTrackId, setLoadingTrackId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
-    const [sleepSeconds, setSleepSeconds] = useState(0); // 0 means off
+    const [sleepSeconds, setSleepSecondsState] = useState(0); // 0 means off
+    const sleepEndTimeRef = useRef(null);
 
     // Refs to avoid stale closures in onPlaybackStatusUpdate
     const queueRef = useRef(queue);
@@ -75,29 +76,35 @@ export const PlayerProvider = ({ children }) => {
         };
     }, [sound]);
 
-    // Sleep Timer Countdown
+    // Sleep Timer UI Sync Countdown
     useEffect(() => {
         let timer;
         if (sleepSeconds > 0 && isPlaying) {
             timer = setInterval(() => {
-                setSleepSeconds(prev => {
-                    if (prev <= 1) {
-                        clearInterval(timer);
-                        // Stop music when timer ends
-                        if (sound) {
-                            sound.pauseAsync().catch(() => {});
-                            setIsPlaying(false);
-                        }
-                        return 0;
-                    }
-                    return prev - 1;
-                });
+                const remaining = sleepEndTimeRef.current ? Math.max(0, Math.floor((sleepEndTimeRef.current - Date.now()) / 1000)) : 0;
+                setSleepSecondsState(remaining);
+                
+                if (remaining <= 0) {
+                    clearInterval(timer);
+                    // Background safety handles the actual stopping, but we cleanup here too
+                    sleepEndTimeRef.current = null;
+                }
             }, 1000);
         }
         return () => {
             if (timer) clearInterval(timer);
         };
-    }, [sleepSeconds, isPlaying, sound]);
+    }, [sleepSeconds > 0, isPlaying]);
+
+    const setSleepSeconds = (seconds) => {
+        if (seconds <= 0) {
+            setSleepSecondsState(0);
+            sleepEndTimeRef.current = null;
+        } else {
+            setSleepSecondsState(seconds);
+            sleepEndTimeRef.current = Date.now() + (seconds * 1000);
+        }
+    };
 
     const shuffleArray = (array) => {
         const shuffled = [...array];
@@ -368,6 +375,20 @@ export const PlayerProvider = ({ children }) => {
         // SYNC POSITION
         setPosition(status.positionMillis);
         setDuration(status.durationMillis);
+
+        // SLEEP TIMER BACKGROUND SAFETY (The "Senior Fix")
+        // Since this callback is triggered by the native audio engine (which runs in background),
+        // we can reliably stop the music here even if JS is throttled.
+        if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current) {
+            console.log('Sleep timer reached in background, stopping playback...');
+            sleepEndTimeRef.current = null;
+            setSleepSecondsState(0);
+            if (sound) {
+                sound.pauseAsync().catch(() => {});
+                setIsPlaying(false);
+            }
+            return;
+        }
 
         // STALL DETECTION
         if (status.isPlaying) {
