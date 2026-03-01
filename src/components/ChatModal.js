@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     View, Text, StyleSheet, Modal, TouchableOpacity, 
     TextInput, FlatList, KeyboardAvoidingView, Platform,
-    ActivityIndicator, Image, Alert, Keyboard
+    ActivityIndicator, Image, Alert, Keyboard, Pressable,
+    Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -287,24 +288,27 @@ const ChatModal = ({ visible, onClose }) => {
                                         <Text style={styles.miniTimeText}>{formatTime(position)}</Text>
                                         <Text style={styles.miniTimeText}>{formatTime(duration)}</Text>
                                     </View>
-                                    <TouchableOpacity 
+                                    <Pressable 
                                         style={styles.miniProgressContainer}
-                                        activeOpacity={1}
                                         onLayout={(e) => {
                                             const { width: layoutWidth } = e.nativeEvent.layout;
-                                            setProgressWidths(prev => ({ ...prev, [item.id]: layoutWidth }));
+                                            if (layoutWidth > 0) {
+                                                setProgressWidths(prev => ({ ...prev, [item.id]: layoutWidth }));
+                                            }
                                         }}
                                         onPress={(e) => {
                                             const { locationX } = e.nativeEvent;
-                                            const barWidth = progressWidths[item.id] || 230; 
+                                            // Fallback to a reasonable width if layout hasn't fired yet
+                                            const barWidth = progressWidths[item.id] || 220; 
                                             const seekProgress = Math.max(0, Math.min(1, locationX / barWidth));
                                             seek(seekProgress * duration);
                                         }}
+                                        hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
                                     >
-                                        <View style={styles.miniProgressBar}>
+                                        <View style={styles.miniProgressBar} pointerEvents="none">
                                             <View style={[styles.miniProgressFill, { width: `${(position / duration) * 100 || 0}%` }]} />
                                         </View>
-                                    </TouchableOpacity>
+                                    </Pressable>
                                 </View>
                             )}
                         </View>
@@ -1056,9 +1060,10 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     miniProgressContainer: {
-        height: 30, // Increased hit area for easier tapping
+        height: 40, // Even larger hit area
         justifyContent: 'center',
-        zIndex: 10, // Ensure it sits above other potential overlaps
+        width: '100%',
+        zIndex: 999, // Extremely high z-index to stay on top
     },
     miniProgressBar: {
         height: 4,
