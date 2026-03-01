@@ -289,10 +289,14 @@ const ChatModal = ({ visible, onClose }) => {
                                     <TouchableOpacity 
                                         style={styles.miniProgressContainer}
                                         activeOpacity={1}
+                                        onLayout={(e) => {
+                                            const { width } = e.nativeEvent.layout;
+                                            item.progressBarWidth = width; // Store temporarily on the item object
+                                        }}
                                         onPress={(e) => {
                                             const { locationX } = e.nativeEvent;
-                                            const totalWidth = 230; 
-                                            const progress = locationX / totalWidth;
+                                            const width = item.progressBarWidth || 220; // Default to a reasonable estimate if layout not yet captured
+                                            const progress = Math.max(0, Math.min(1, locationX / width));
                                             seek(progress * duration);
                                         }}
                                     >
