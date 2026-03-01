@@ -217,124 +217,158 @@ const ChatModal = ({ visible, onClose }) => {
         return (
             <View style={[styles.messageRow, isMine ? styles.myMessageRow : styles.theirMessageRow]}>
                 <View style={[styles.bubbleContainer, isMine ? { alignItems: 'flex-end' } : { alignItems: 'flex-start' }]}>
-                    <TouchableOpacity 
-                        style={[
-                            styles.bubble, 
-                            isMine ? styles.myBubble : styles.theirBubble, 
-                            item.is_pinned && styles.pinnedBubble,
-                            isFailed && styles.failedBubble
-                        ]}
-                        onLongPress={() => {
-                            if (!isPending) {
-                                setSelectedMessage(item);
-                                setShowActionModal(true);
-                            }
-                        }}
-                        activeOpacity={0.8}
-                    >
-                        {item.is_pinned && (
-                            <View style={styles.pinIndicator}>
-                                <Ionicons name="pin" size={12} color="#1DB954" />
-                                <Text style={styles.pinIndicatorText}>Pinned</Text>
-                            </View>
-                        )}
-                        {showName && (
-                            <Text style={styles.senderName}>{activeChatUser.full_name || 'User'}</Text>
-                        )}
-                        
-                        {hasMusic && track && (
-                            <View style={styles.musicCardContainer}>
-                                <TouchableOpacity 
-                                    style={styles.musicCard}
-                                    onPress={() => {
-                                        if (currentTrack?.id === track.id) {
-                                            togglePlayPause();
-                                        } else {
-                                            playTrack(track, [track]);
-                                        }
-                                    }}
-                                    activeOpacity={0.7}
-                                >
-                                {track.cover_url && (
-                                    <Image source={{ uri: track.cover_url }} style={styles.musicCardThumb} />
-                                ) || (
-                                    <View style={[styles.musicCardThumb, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
-                                        <Ionicons name="musical-note" size={24} color="#555" />
+
+                    {/* Music card rendered OUTSIDE the outer bubble touchable to allow inner interactions */}
+                    {hasMusic && track && (
+                        <View style={styles.musicCardContainer}>
+                            <TouchableOpacity 
+                                style={[styles.musicCard, item.is_pinned && styles.pinnedBubble]}
+                                onPress={() => {
+                                    if (currentTrack?.id === track.id) {
+                                        togglePlayPause();
+                                    } else {
+                                        playTrack(track, [track]);
+                                    }
+                                }}
+                                onLongPress={() => {
+                                    if (!isPending) {
+                                        setSelectedMessage(item);
+                                        setShowActionModal(true);
+                                    }
+                                }}
+                                activeOpacity={0.7}
+                            >
+                                {item.is_pinned && (
+                                    <View style={styles.pinIndicator}>
+                                        <Ionicons name="pin" size={12} color="#1DB954" />
+                                        <Text style={styles.pinIndicatorText}>Pinned</Text>
                                     </View>
                                 )}
-                                <View style={styles.musicDetails}>
-                                    <Text style={styles.musicTitle} numberOfLines={1}>{track.title}</Text>
-                                    <Text style={styles.musicArtist} numberOfLines={1}>
-                                        {track.artist || 'Original Composition'}
-                                        {track.genre ? ` • ${track.genre}` : ''}
-                                    </Text>
-                                </View>
-                                <View style={styles.musicIconContainer}>
-                                    {(isBuffering || (isLoading && loadingTrackId === track.id)) && currentTrack?.id === track.id ? (
-                                        <ActivityIndicator size="small" color="#1DB954" />
+                                {showName && (
+                                    <Text style={styles.senderName}>{activeChatUser.full_name || 'User'}</Text>
+                                )}
+                                <View style={styles.musicCardInner}>
+                                    {track.cover_url ? (
+                                        <Image source={{ uri: track.cover_url }} style={styles.musicCardThumb} />
                                     ) : (
-                                        <Ionicons 
-                                            name={currentTrack?.id === track.id && isPlaying ? "pause" : "play"} 
-                                            size={22} 
-                                            color="#1DB954" 
-                                        />
+                                        <View style={[styles.musicCardThumb, { backgroundColor: '#333', justifyContent: 'center', alignItems: 'center' }]}>
+                                            <Ionicons name="musical-note" size={24} color="#555" />
+                                        </View>
+                                    )}
+                                    <View style={styles.musicDetails}>
+                                        <Text style={styles.musicTitle} numberOfLines={1}>{track.title}</Text>
+                                        <Text style={styles.musicArtist} numberOfLines={1}>
+                                            {track.artist || 'Original Composition'}
+                                            {track.genre ? ` • ${track.genre}` : ''}
+                                        </Text>
+                                    </View>
+                                    <View style={styles.musicIconContainer}>
+                                        {(isBuffering || (isLoading && loadingTrackId === track.id)) && currentTrack?.id === track.id ? (
+                                            <ActivityIndicator size="small" color="#1DB954" />
+                                        ) : (
+                                            <Ionicons 
+                                                name={currentTrack?.id === track.id && isPlaying ? "pause" : "play"} 
+                                                size={22} 
+                                                color="#1DB954" 
+                                            />
+                                        )}
+                                    </View>
+                                </View>
+                                <View style={styles.messageFooter}>
+                                    <Text style={[
+                                        styles.timeText, 
+                                        isMine && !item.is_pinned && { color: 'rgba(0,0,0,0.5)' },
+                                        (item.is_pinned || !isMine) && { color: 'rgba(255,255,255,0.6)' }
+                                    ]}>
+                                        {new Date(item.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}
+                                    </Text>
+                                    {isMine && (
+                                        <View style={styles.statusContainer}>
+                                            {getStatusIcon()}
+                                        </View>
                                     )}
                                 </View>
                             </TouchableOpacity>
 
+                            {/* Progress bar is a SIBLING of the TouchableOpacity, so it gets its own touch events */}
                             {currentTrack?.id === track.id && (
                                 <View style={styles.miniProgressArea}>
                                     <View style={styles.miniTimeRow}>
                                         <Text style={styles.miniTimeText}>{formatTime(position)}</Text>
                                         <Text style={styles.miniTimeText}>{formatTime(duration)}</Text>
                                     </View>
-                                    <Pressable 
+                                    <TouchableOpacity 
                                         style={styles.miniProgressContainer}
-                                        onLayout={(e) => {
-                                            const { width: layoutWidth } = e.nativeEvent.layout;
-                                            if (layoutWidth > 0) {
-                                                setProgressWidths(prev => ({ ...prev, [item.id]: layoutWidth }));
-                                            }
-                                        }}
                                         onPress={(e) => {
                                             const { locationX } = e.nativeEvent;
-                                            // Fallback to a reasonable width if layout hasn't fired yet
-                                            const barWidth = progressWidths[item.id] || 220; 
+                                            const barWidth = 220; // Fixed width for reliability
                                             const seekProgress = Math.max(0, Math.min(1, locationX / barWidth));
-                                            seek(seekProgress * duration);
+                                            if (duration > 0) {
+                                                seek(Math.floor(seekProgress * duration));
+                                            }
                                         }}
-                                        hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
+                                        activeOpacity={0.7}
+                                        hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}
                                     >
                                         <View style={styles.miniProgressBar} pointerEvents="none">
-                                            <View style={[styles.miniProgressFill, { width: `${(position / duration) * 100 || 0}%` }]} />
+                                            <View style={[styles.miniProgressFill, { width: `${(position / (duration || 1)) * 100}%` }]} />
+                                            <View style={[styles.miniProgressHandle, { left: `${(position / (duration || 1)) * 100}%` }]} />
                                         </View>
-                                    </Pressable>
+                                    </TouchableOpacity>
                                 </View>
                             )}
                         </View>
                     )}
 
-                    {item.content ? (
-                            <Text style={[styles.messageText, isMine ? styles.myText : styles.theirText]}>
-                                {item.content.replace(/^Sharing: .*/, '').trim()}
-                            </Text>
-                        ) : null}
-                        
-                        <View style={styles.messageFooter}>
-                            <Text style={[
-                                styles.timeText, 
-                                isMine && !item.is_pinned && { color: 'rgba(0,0,0,0.5)' },
-                                (item.is_pinned || !isMine) && { color: 'rgba(255,255,255,0.6)' }
-                            ]}>
-                                {new Date(item.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}
-                            </Text>
-                            {isMine && (
-                                <View style={styles.statusContainer}>
-                                    {getStatusIcon()}
+                    {/* Text-only bubble for non-music messages */}
+                    {!hasMusic && (
+                        <TouchableOpacity 
+                            style={[
+                                styles.bubble, 
+                                isMine ? styles.myBubble : styles.theirBubble, 
+                                item.is_pinned && styles.pinnedBubble,
+                                isFailed && styles.failedBubble
+                            ]}
+                            onLongPress={() => {
+                                if (!isPending) {
+                                    setSelectedMessage(item);
+                                    setShowActionModal(true);
+                                }
+                            }}
+                            activeOpacity={0.8}
+                        >
+                            {item.is_pinned && (
+                                <View style={styles.pinIndicator}>
+                                    <Ionicons name="pin" size={12} color="#1DB954" />
+                                    <Text style={styles.pinIndicatorText}>Pinned</Text>
                                 </View>
                             )}
-                        </View>
-                    </TouchableOpacity>
+                            {showName && (
+                                <Text style={styles.senderName}>{activeChatUser.full_name || 'User'}</Text>
+                            )}
+
+                            {item.content ? (
+                                <Text style={[styles.messageText, isMine ? styles.myText : styles.theirText]}>
+                                    {item.content.replace(/^Sharing: .*/, '').trim()}
+                                </Text>
+                            ) : null}
+                            
+                            <View style={styles.messageFooter}>
+                                <Text style={[
+                                    styles.timeText, 
+                                    isMine && !item.is_pinned && { color: 'rgba(0,0,0,0.5)' },
+                                    (item.is_pinned || !isMine) && { color: 'rgba(255,255,255,0.6)' }
+                                ]}>
+                                    {new Date(item.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()}
+                                </Text>
+                                {isMine && (
+                                    <View style={styles.statusContainer}>
+                                        {getStatusIcon()}
+                                    </View>
+                                )}
+                            </View>
+                        </TouchableOpacity>
+                    )}
 
                     {isFailed && (
                         <View style={styles.failedActionsRow}>
@@ -1000,14 +1034,16 @@ const styles = StyleSheet.create({
     },
     // Music Card Styles
     musicCard: {
-        flexDirection: 'row',
-        alignItems: 'center',
         backgroundColor: 'rgba(0,0,0,0.2)',
         borderRadius: 12,
         padding: 10,
         marginBottom: 8,
         borderWidth: 1,
         borderColor: 'rgba(0,0,0,0.15)',
+    },
+    musicCardInner: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     musicIconContainer: {
         width: 32,
@@ -1045,9 +1081,10 @@ const styles = StyleSheet.create({
         marginBottom: 8,
     },
     miniProgressArea: {
-        marginTop: -5,
-        paddingBottom: 8,
+        marginTop: 4,
+        paddingBottom: 12,
         paddingHorizontal: 5,
+        zIndex: 10,
     },
     miniTimeRow: {
         flexDirection: 'row',
@@ -1060,22 +1097,35 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     miniProgressContainer: {
-        height: 40, // Even larger hit area
+        height: 30,
         justifyContent: 'center',
         width: '100%',
-        zIndex: 999, // Extremely high z-index to stay on top
     },
     miniProgressBar: {
-        height: 4,
-        backgroundColor: 'rgba(0,0,0,0.25)',
-        borderRadius: 2,
+        height: 6,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 3,
+        position: 'relative',
         width: '100%',
-        overflow: 'hidden',
     },
     miniProgressFill: {
         height: '100%',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        borderRadius: 2,
+        backgroundColor: '#1DB954',
+        borderRadius: 3,
+    },
+    miniProgressHandle: {
+        position: 'absolute',
+        width: 14,
+        height: 14,
+        borderRadius: 7,
+        backgroundColor: '#fff',
+        top: -4,
+        marginLeft: -7,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.4,
+        shadowRadius: 2,
     },
     pinnedBubble: {
         borderWidth: 1.5,

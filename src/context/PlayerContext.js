@@ -265,7 +265,7 @@ export const PlayerProvider = ({ children }) => {
                     { 
                         shouldPlay: true, 
                         isLooping: repeatModeRef.current === 'one',
-                        progressUpdateIntervalMillis: 500,
+                        progressUpdateIntervalMillis: 100,
                         positionMillis: savedPosition
                     },
                     onPlaybackStatusUpdate
@@ -438,6 +438,15 @@ export const PlayerProvider = ({ children }) => {
         }
 
         setIsPlaying(status.isPlaying);
+        
+        // SYNC PROGRESS (Crucial for all UI bars)
+        if (status.positionMillis !== undefined) {
+            setPosition(status.positionMillis);
+            lastPositionRef.current = status.positionMillis;
+        }
+        if (status.durationMillis !== undefined) {
+            setDuration(status.durationMillis);
+        }
 
         // Auto-play next track logic
         if (status.didJustFinish && !status.isLooping) {
