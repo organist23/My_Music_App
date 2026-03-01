@@ -22,6 +22,7 @@ export const PlayerProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [sleepSeconds, setSleepSecondsState] = useState(0); // 0 means off
     const sleepEndTimeRef = useRef(null);
+    const soundRef = useRef(null);
 
     // Refs to avoid stale closures in onPlaybackStatusUpdate
     const queueRef = useRef(queue);
@@ -43,7 +44,8 @@ export const PlayerProvider = ({ children }) => {
         isShuffleRef.current = isShuffle;
         repeatModeRef.current = repeatMode;
         currentTrackRef.current = currentTrack;
-    }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack]);
+        soundRef.current = sound;
+    }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack, sound]);
 
     // Initial Audio mode setup
     useEffect(() => {
@@ -385,8 +387,8 @@ export const PlayerProvider = ({ children }) => {
             sleepEndTimeRef.current = null;
             setSleepSecondsState(0);
             setIsPlaying(false);
-            if (sound) {
-                sound.pauseAsync().catch(() => {}); // Pause instead of stop to preserve position
+            if (soundRef.current) {
+                soundRef.current.pauseAsync().catch(() => {}); // Use Ref to avoid stale closure
             }
             return;
         }
