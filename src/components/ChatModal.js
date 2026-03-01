@@ -36,6 +36,7 @@ const ChatModal = ({ visible, onClose }) => {
     const [selectedInboxUser, setSelectedInboxUser] = useState(null);
     const [showInboxActionModal, setShowInboxActionModal] = useState(false);
     const [searchQueryInbox, setSearchQueryInbox] = useState('');
+    const [progressWidths, setProgressWidths] = useState({});
     const flatListRef = useRef(null);
 
     const isAdmin = profile?.role === 'admin';
@@ -290,14 +291,14 @@ const ChatModal = ({ visible, onClose }) => {
                                         style={styles.miniProgressContainer}
                                         activeOpacity={1}
                                         onLayout={(e) => {
-                                            const { width } = e.nativeEvent.layout;
-                                            item.progressBarWidth = width; // Store temporarily on the item object
+                                            const { width: layoutWidth } = e.nativeEvent.layout;
+                                            setProgressWidths(prev => ({ ...prev, [item.id]: layoutWidth }));
                                         }}
                                         onPress={(e) => {
                                             const { locationX } = e.nativeEvent;
-                                            const width = item.progressBarWidth || 220; // Default to a reasonable estimate if layout not yet captured
-                                            const progress = Math.max(0, Math.min(1, locationX / width));
-                                            seek(progress * duration);
+                                            const barWidth = progressWidths[item.id] || 230; 
+                                            const seekProgress = Math.max(0, Math.min(1, locationX / barWidth));
+                                            seek(seekProgress * duration);
                                         }}
                                     >
                                         <View style={styles.miniProgressBar}>
@@ -1055,8 +1056,9 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
     },
     miniProgressContainer: {
-        height: 12,
+        height: 30, // Increased hit area for easier tapping
         justifyContent: 'center',
+        zIndex: 10, // Ensure it sits above other potential overlaps
     },
     miniProgressBar: {
         height: 4,
