@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
     View, Text, StyleSheet, Modal, TouchableOpacity, 
     TextInput, FlatList, KeyboardAvoidingView, Platform,
-    ActivityIndicator, Image, Alert
+    ActivityIndicator, Image, Alert, Keyboard
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,6 +53,19 @@ const ChatModal = ({ visible, onClose }) => {
                 fetchAdminIdAndMarkRead();
             }
         }
+
+        const keyboardShowListener = Keyboard.addListener(
+            Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+            () => {
+                setTimeout(() => {
+                    flatListRef.current?.scrollToEnd({ animated: true });
+                }, 100);
+            }
+        );
+
+        return () => {
+            keyboardShowListener.remove();
+        };
     }, [visible, activeChatUser]);
 
     const fetchAdminIdAndMarkRead = async () => {
@@ -454,8 +467,8 @@ const ChatModal = ({ visible, onClose }) => {
                     // Conversation View
                     <KeyboardAvoidingView 
                         style={styles.chatArea} 
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 50 : 0}
+                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + (isAdmin ? 50 : 60) : 0}
                     >
                         {messages.some(m => m.is_pinned) && (
                             <View style={styles.pinnedHeader}>
@@ -519,7 +532,7 @@ const ChatModal = ({ visible, onClose }) => {
                             }}
                         />
                         
-                        <View style={[styles.inputWrapper, { paddingBottom: Math.max(insets.bottom, 15) }]}>
+                        <View style={[styles.inputWrapper, { paddingBottom: Math.max(insets.bottom, 10) }]}>
                             <View style={styles.inputOuter}>
                                 {!isAdmin && (
                                     <TouchableOpacity 

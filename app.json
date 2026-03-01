@@ -22,7 +22,7 @@
       },
       "package": "com.organist23.musicapp",
       "edgeToEdgeEnabled": true,
-      "softwareKeyboardLayoutMode": "pan",
+      "softwareKeyboardLayoutMode": "resize",
       "navigationBar": {
         "backgroundColor": "#000000",
         "barStyle": "light-content"
