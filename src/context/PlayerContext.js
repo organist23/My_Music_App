@@ -88,6 +88,7 @@ export const PlayerProvider = ({ children }) => {
                     clearInterval(timer);
                     // Background safety handles the actual stopping, but we cleanup here too
                     sleepEndTimeRef.current = null;
+                    setIsPlaying(false);
                 }
             }, 1000);
         }
@@ -380,12 +381,12 @@ export const PlayerProvider = ({ children }) => {
         // Since this callback is triggered by the native audio engine (which runs in background),
         // we can reliably stop the music here even if JS is throttled.
         if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current) {
-            console.log('Sleep timer reached in background, stopping playback...');
+            console.log('Sleep timer reached in background, pausing playback...');
             sleepEndTimeRef.current = null;
             setSleepSecondsState(0);
+            setIsPlaying(false);
             if (sound) {
-                sound.pauseAsync().catch(() => {});
-                setIsPlaying(false);
+                sound.pauseAsync().catch(() => {}); // Pause instead of stop to preserve position
             }
             return;
         }
