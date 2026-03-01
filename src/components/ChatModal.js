@@ -57,10 +57,12 @@ const ChatModal = ({ visible, onClose }) => {
         const keyboardShowListener = Keyboard.addListener(
             Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
             () => {
-                // Slightly longer delay for the very first interaction
+                // Ensure list scrolls to end when keyboard appears
+                // Using a slightly longer delay and immediate scroll for robustness
+                flatListRef.current?.scrollToEnd({ animated: true });
                 setTimeout(() => {
                     flatListRef.current?.scrollToEnd({ animated: true });
-                }, 150);
+                }, 100);
             }
         );
 
@@ -477,11 +479,11 @@ const ChatModal = ({ visible, onClose }) => {
                     })()
                 ) : (
                     // Conversation View
-                    <KeyboardAvoidingView 
-                        style={styles.chatArea} 
-                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-                    >
+                        <KeyboardAvoidingView 
+                            style={styles.chatArea} 
+                            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
+                        >
                         {messages.some(m => m.is_pinned) && (
                             <View style={styles.pinnedHeader}>
                                 <Ionicons name="pin" size={16} color="#1DB954" />
