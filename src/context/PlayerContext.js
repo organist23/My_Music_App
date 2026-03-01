@@ -36,6 +36,8 @@ export const PlayerProvider = ({ children }) => {
     const isLoadingRef = useRef(false);
     const retryTimeoutRef = useRef(null);
     const stallTimeoutRef = useRef(null);
+    const bufferingHideTimeoutRef = useRef(null);
+    const isBufferingRef = useRef(false);
 
     useEffect(() => {
         queueRef.current = queue;
@@ -45,7 +47,8 @@ export const PlayerProvider = ({ children }) => {
         repeatModeRef.current = repeatMode;
         currentTrackRef.current = currentTrack;
         soundRef.current = sound;
-    }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack, sound]);
+        isBufferingRef.current = isBuffering;
+    }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack, sound, isBuffering]);
 
     // Initial Audio mode setup
     useEffect(() => {
@@ -72,6 +75,7 @@ export const PlayerProvider = ({ children }) => {
         return () => {
             if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
             if (stallTimeoutRef.current) clearTimeout(stallTimeoutRef.current);
+            if (bufferingHideTimeoutRef.current) clearTimeout(bufferingHideTimeoutRef.current);
             if (sound) {
                 sound.unloadAsync().catch(() => {});
             }
@@ -243,11 +247,17 @@ export const PlayerProvider = ({ children }) => {
                 // onPlaybackStatusUpdate will handle it.
                 setCurrentTrack(track);
                 currentTrackRef.current = track;
-                setIsPlaying(false); // Stop monitor from thinking it's an unexpected unload
+                // Spotify Smooth Transition Fix: 
+                // Don't flip isPlaying to false if we are transitioning between tracks
+                // while already in a "Playing" intent.
+                if (!isPlaying && !isBuffering) {
+                    setIsPlaying(false);
+                }
                 
-                if (sound) {
-                    await sound.unloadAsync().catch(() => {});
+                if (soundRef.current) {
+                    await soundRef.current.unloadAsync().catch(() => {});
                     setSound(null);
+                    soundRef.current = null;
                 }
 
                 const { sound: newSound } = await Audio.Sound.createAsync(
@@ -360,82 +370,79 @@ export const PlayerProvider = ({ children }) => {
                 console.log('[RECONNECTING] Sound object unloaded unexpectedly, restarting...');
                 setIsPlaying(false); // Prevent infinite loop before next play attempt
                 playTrack(currentTrackRef.current);
-            } else {
                 // If it unloads and we weren't expecting it (and not in loading state),
                 // make sure we stop showing as "playing"
                 setIsPlaying(false);
+                setIsBuffering(false);
+                setIsLoading(false);
+                isLoadingRef.current = false;
+                setLoadingTrackId(null);
             }
             return;
         }
 
-        // Initial Load Cleanup: If we get any valid status, the "Initial Load" is over
-        if (isLoadingRef.current) {
+        // Initial Load Cleanup: 
+        // We wait until the track is actually playing OR loaded to clear the loader,
+        // but we keep isPlaying true if we are in a transition.
+        // Initial Load Cleanup: 
+        // Once the sound object is created (isLoaded), we transition from "Loading" (metadata/setup)
+        // to "Buffering" (network stream status). This prevents the initial loader from 
+        // getting stuck if the stream is slow but the object is technically ready.
+        if (isLoadingRef.current && status.isLoaded) {
             setIsLoading(false);
             isLoadingRef.current = false;
             setLoadingTrackId(null);
         }
 
-        // SYNC POSITION
-        setPosition(status.positionMillis);
-        setDuration(status.durationMillis);
-
-        // SLEEP TIMER BACKGROUND SAFETY (The "Senior Fix")
-        // Since this callback is triggered by the native audio engine (which runs in background),
-        // we can reliably stop the music here even if JS is throttled.
-        if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current) {
-            console.log('Sleep timer reached in background, pausing playback...');
-            sleepEndTimeRef.current = null;
-            setSleepSecondsState(0);
-            setIsPlaying(false);
-            if (soundRef.current) {
-                soundRef.current.pauseAsync().catch(() => {}); // Use Ref to avoid stale closure
+        // INITIAL LOAD SYNC
+        if (status.isLoaded && status.shouldPlay && !status.isPlaying && !status.isBuffering) {
+            if (!stallTimeoutRef.current) {
+                stallTimeoutRef.current = setTimeout(() => {
+                    if (soundRef.current) soundRef.current.playAsync().catch(() => {});
+                    stallTimeoutRef.current = null;
+                }, 1500); // Reduced to 1.5s for snappier feel
             }
-            return;
         }
 
-        // STALL DETECTION
-        if (status.isPlaying) {
-            lastPositionRef.current = status.positionMillis;
-            lastPositionTimeRef.current = Date.now();
-        } else {
-            // Keep the timer fresh when paused/stopped
-            lastPositionTimeRef.current = Date.now();
-        }
+        // BUFFERING LOGIC (The "Spotify Smooth" Fix)
+        // We use isBufferingRef.current to avoid stale closure issues during network jumps.
+        let isActuallyBuffering = status.isBuffering || (status.shouldPlay && !status.isPlaying);
 
-        // BUFFERING LOGIC (The "Hear it, See it" Fix)
-        // If the music is actually playing (audible), we hide the loader immediately.
-        // We only show "buffering/loading" if it ISN'T playing but wants to.
-        
-        let effectiveBuffering = status.isBuffering || (status.shouldPlay && !status.isPlaying);
-
-        // Spotify UX: 
-        // 1. If we are audibly playing, hide loader.
-        // 2. If the user has explicitly paused (shouldPlay is false), hide loader.
         if (status.isPlaying || !status.shouldPlay) {
-            effectiveBuffering = false;
+            isActuallyBuffering = false;
         }
 
-        setIsBuffering(effectiveBuffering);
+        if (isActuallyBuffering) {
+            // Show loader immediately
+            if (bufferingHideTimeoutRef.current) {
+                clearTimeout(bufferingHideTimeoutRef.current);
+                bufferingHideTimeoutRef.current = null;
+            }
+            if (!isBufferingRef.current) setIsBuffering(true);
+        } else {
+            // STALENESS FIX: If audibly playing, clear buffering immediately.
+            // Don't wait for a timer if the music is already in the user's ears.
+            if (status.isPlaying) {
+                if (bufferingHideTimeoutRef.current) {
+                    clearTimeout(bufferingHideTimeoutRef.current);
+                    bufferingHideTimeoutRef.current = null;
+                }
+                setIsBuffering(false);
+            } else if (isBufferingRef.current && !bufferingHideTimeoutRef.current) {
+                // If not playing (e.g. paused), use the smooth exit timer
+                bufferingHideTimeoutRef.current = setTimeout(() => {
+                    setIsBuffering(false);
+                    bufferingHideTimeoutRef.current = null;
+                }, 500); // reduced to 500ms for responsiveness
+            }
+        }
+
         setIsPlaying(status.isPlaying);
 
         // Auto-play next track logic
         if (status.didJustFinish && !status.isLooping) {
-            // Dashboard Single-Play Fix:
-            // If we are on Home/Dashboard and not in shuffle/repeat, STOP instead of playing next.
-            const isDashboardContext = playingFrom?.type === 'dashboard' || playingFrom?.type === 'admin_dashboard';
-            if (isDashboardContext && repeatModeRef.current === 'none' && !isShuffleRef.current) {
-                // We don't call playNext here, we just ensure UI is reset
-                // (playNext logic was slightly redundant here since we stop)
-                if (sound) {
-                    sound.stopAsync().catch(() => {});
-                    sound.setPositionAsync(0).catch(() => {});
-                }
-                setPosition(0);
-                setIsPlaying(false);
-                setIsBuffering(false);
-            } else {
-                playNext();
-            }
+            // Ensure we clear isPlaying briefly only if queue is empty (handled in playNext)
+            playNext();
         }
     };
 

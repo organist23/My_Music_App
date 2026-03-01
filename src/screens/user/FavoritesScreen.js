@@ -67,7 +67,7 @@ const FavoritesScreen = ({ navigation }) => {
                     <Image source={{ uri: item.music.cover_url }} style={styles.trackCover} />
                     {currentTrack?.id === item.music.id && (
                         <View style={styles.visualizerOverlay}>
-                            <PlayingVisualizer isPlaying={isPlaying} />
+                            <PlayingVisualizer isPlaying={isPlaying && !isBuffering} />
                         </View>
                     )}
                 </View>

@@ -57,9 +57,10 @@ const ChatModal = ({ visible, onClose }) => {
         const keyboardShowListener = Keyboard.addListener(
             Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
             () => {
+                // Slightly longer delay for the very first interaction
                 setTimeout(() => {
                     flatListRef.current?.scrollToEnd({ animated: true });
-                }, 100);
+                }, 150);
             }
         );
 
@@ -381,7 +382,18 @@ const ChatModal = ({ visible, onClose }) => {
     );
 
     return (
-        <Modal visible={visible} animationType="slide" transparent={false}>
+        <Modal 
+            visible={visible} 
+            animationType="slide" 
+            transparent={false}
+            onRequestClose={() => {
+                if (isAdmin && activeChatUser) {
+                    setActiveChatUser(null);
+                } else {
+                    onClose();
+                }
+            }}
+        >
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 {/* Header */}
                 <View style={styles.header}>
@@ -467,8 +479,8 @@ const ChatModal = ({ visible, onClose }) => {
                     // Conversation View
                     <KeyboardAvoidingView 
                         style={styles.chatArea} 
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + (isAdmin ? 50 : 60) : 0}
+                        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
                     >
                         {messages.some(m => m.is_pinned) && (
                             <View style={styles.pinnedHeader}>

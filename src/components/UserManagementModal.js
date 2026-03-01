@@ -146,7 +146,7 @@ const UserManagementModal = ({ visible, onClose }) => {
     };
 
     return (
-        <Modal visible={visible} animationType="slide" transparent={false}>
+        <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
             <View style={[styles.container, { paddingTop: insets.top }]}>
                 <View style={styles.header}>
                     <TouchableOpacity onPress={onClose} style={styles.closeBtn}>

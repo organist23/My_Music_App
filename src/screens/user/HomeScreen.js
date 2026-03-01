@@ -174,7 +174,7 @@ const HomeScreen = ({ navigation }) => {
                         <View style={styles.cardInfo}>
                             {currentTrack?.id === item.id && (
                                 <View style={styles.visualizerContainer}>
-                                    <PlayingVisualizer isPlaying={isPlaying} />
+                                    <PlayingVisualizer isPlaying={isPlaying && !isBuffering} />
                                 </View>
                             )}
                             <Text 

@@ -198,7 +198,7 @@ const PlaylistsScreen = ({ navigation }) => {
                     <Image source={{ uri: item.music.cover_url }} style={styles.songCover} />
                     {isCurrentID && (
                         <View style={styles.visualizerOverlay}>
-                            <PlayingVisualizer isPlaying={isPlaying} />
+                            <PlayingVisualizer isPlaying={isPlaying && !isBuffering} />
                         </View>
                     )}
                     <TouchableOpacity 
