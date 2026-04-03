@@ -41,7 +41,9 @@ export const PlayerProvider = ({ children }) => {
     const sleepTimerIntervalRef = useRef(null);
     const appStateRef = useRef(AppState.currentState);
     // True if the sleep timer fired — blocks music from (re)starting after expiry
+    const isPlayingRef = useRef(false);
     const sleepExpiredRef = useRef(false);
+    const userRef = useRef(user);
 
     // Keep all refs in sync with state
     useEffect(() => {
@@ -53,7 +55,9 @@ export const PlayerProvider = ({ children }) => {
         currentTrackRef.current = currentTrack;
         soundRef.current = sound;
         isBufferingRef.current = isBuffering;
-    }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack, sound, isBuffering]);
+        isPlayingRef.current = isPlaying;
+        userRef.current = user;
+    }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack, sound, isBuffering, isPlaying, user]);
 
     // ─── Audio Mode Setup ───
     const setupAudioMode = async () => {
@@ -74,6 +78,14 @@ export const PlayerProvider = ({ children }) => {
 
     useEffect(() => {
         setupAudioMode();
+
+        return () => {
+            if (soundRef.current) {
+                try {
+                    soundRef.current.unloadAsync();
+                } catch(e) {}
+            }
+        };
     }, []);
 
     // AppState listener moved further down so it can access sleep timer functions
@@ -314,9 +326,12 @@ export const PlayerProvider = ({ children }) => {
     // Logout Watchdog: Stop music if user logs out
     const { user } = useAuth();
     useEffect(() => {
-        if (!user && (sound || isPlaying)) {
-            console.log('User logged out, stopping playback...');
-            stopPlayback();
+        if (!user) {
+            // Check refs directly to see if anything is active/loaded
+            if (soundRef.current || isPlayingRef.current || currentTrackRef.current) {
+                console.log('User logged out, stopping playback...');
+                stopPlayback();
+            }
         }
     }, [user]);
 
@@ -369,9 +384,9 @@ export const PlayerProvider = ({ children }) => {
         const savedPosition = isSameTrack ? (lastPositionRef.current || 0) : 0;
 
         const attemptPlay = async (retryCount = 0) => {
-            // ─── Sleep guard: abort if sleep already expired while we were loading ───
-            if (sleepExpiredRef.current) {
-                console.log('[SLEEP] Aborting track load — sleep timer already expired.');
+            // ─── SAFEGUARD: Abort if user logged out or sleep expired ───
+            if (!userRef.current || sleepExpiredRef.current) {
+                console.log('[ABORT] Stopping track load — user logout or sleep timer.');
                 setIsLoading(false);
                 isLoadingRef.current = false;
                 setLoadingTrackId(null);
@@ -404,9 +419,9 @@ export const PlayerProvider = ({ children }) => {
                     onPlaybackStatusUpdate
                 );
                 
-                // Re-check sleep after the synchronous load (if it took time)
-                if (sleepExpiredRef.current) {
-                    console.log('[SLEEP] Aborting playback — sleep timer expired during load.');
+                // Re-check user/sleep after the asynchronous load
+                if (!userRef.current || sleepExpiredRef.current) {
+                    console.log('[ABORT] Sound loaded but user is gone — unloading it.');
                     try { await newSound.unloadAsync(); } catch(e){}
                     setIsLoading(false);
                     isLoadingRef.current = false;
