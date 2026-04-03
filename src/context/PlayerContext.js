@@ -296,6 +296,9 @@ export const PlayerProvider = ({ children }) => {
     const playTrack = async (track, newQueue = [], context = null) => {
         if (!track) return;
 
+        // User is manually initiating playback, so clear any leftover sleep expiry state
+        sleepExpiredRef.current = false;
+
         if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
         if (stallTimeoutRef.current) clearTimeout(stallTimeoutRef.current);
 
@@ -584,6 +587,9 @@ export const PlayerProvider = ({ children }) => {
                     setIsPlaying(false);
                     setIsBuffering(false);
                 } else {
+                    // User manually resumed, clear any sleep expiry state
+                    sleepExpiredRef.current = false;
+
                     if (status.didJustFinish || status.positionMillis >= status.durationMillis - 100) {
                         await sound.setPositionAsync(0);
                     }
