@@ -172,7 +172,18 @@ const AdminDashboardScreen = ({ navigation }) => {
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setRequests(data);
+
+            // De-duplicate: if there are multiple rows for the same (user_id, music_id),
+            // keep only the most recent one (first one since we ordered DESC)
+            const seen = new Set();
+            const deduped = (data || []).filter(item => {
+                const key = `${item.user_id}_${item.music_id}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+
+            setRequests(deduped);
         } catch (error) {
             Alert.alert('Error', error.message);
         }
@@ -293,7 +304,7 @@ const AdminDashboardScreen = ({ navigation }) => {
                 
                 Alert.alert('Success', 'Request rejected and removed.');
             } else {
-                // Update request status (for approved)
+                // Update request status to approved
                 const { error: requestError } = await supabase
                     .from('music_requests')
                     .update({ status })
@@ -301,11 +312,18 @@ const AdminDashboardScreen = ({ navigation }) => {
 
                 if (requestError) throw requestError;
 
-                // If approved, grant download permission
+                // If approved, grant (or refresh) download permission
+                // Delete old permission first so granted_at is reset to NOW()
                 if (status === 'approved') {
+                    await supabase
+                        .from('download_permissions')
+                        .delete()
+                        .eq('user_id', userId)
+                        .eq('music_id', musicId);
+
                     const { error: permError } = await supabase
                         .from('download_permissions')
-                        .upsert({ user_id: userId, music_id: musicId });
+                        .insert({ user_id: userId, music_id: musicId });
 
                     if (permError) throw permError;
                 }

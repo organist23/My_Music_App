@@ -19,7 +19,7 @@ const HomeScreen = ({ navigation }) => {
     const [selectedGenre, setSelectedGenre] = useState('All');
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [permissions, setPermissions] = useState([]);
+    const [permissions, setPermissions] = useState([]); // music_ids with a VALID (non-expired) permission
     const [pendingRequests, setPendingRequests] = useState([]);
     const [refreshing, setRefreshing] = useState(false);
     const { user } = useAuth();
@@ -65,14 +65,20 @@ const HomeScreen = ({ navigation }) => {
             if (showLoading && music.length === 0) setLoading(true);
             const [musicRes, permRes, reqRes] = await Promise.all([
                 supabase.from('music').select('*').order('created_at', { ascending: false }),
-                user ? supabase.from('download_permissions').select('music_id').eq('user_id', user.id) : Promise.resolve({ data: [] }),
+                user ? supabase.from('download_permissions').select('music_id, granted_at').eq('user_id', user.id) : Promise.resolve({ data: [] }),
                 user ? supabase.from('music_requests').select('music_id').eq('user_id', user.id).eq('status', 'pending') : Promise.resolve({ data: [] })
             ]);
 
             if (musicRes.error) throw musicRes.error;
             
             setMusic(musicRes.data);
-            setPermissions((permRes.data || []).map(p => p.music_id));
+
+            // Only mark as downloadable if the permission was granted within the last 7 days
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const validPermissions = (permRes.data || []).filter(p => new Date(p.granted_at) > sevenDaysAgo).map(p => p.music_id);
+            setPermissions(validPermissions);
+
             setPendingRequests((reqRes.data || []).map(r => r.music_id));
             
             const uniqueGenres = ['All', ...new Set(musicRes.data.map(item => item.genre))];

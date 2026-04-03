@@ -161,7 +161,7 @@ const MusicPlayerScreen = ({ navigation }) => {
                 .select('*')
                 .eq('user_id', user.id)
                 .eq('music_id', currentTrack.id)
-                .single();
+                .maybeSingle();
 
             if (permData) {
                 // Check if permission is older than 7 days
@@ -173,16 +173,19 @@ const MusicPlayerScreen = ({ navigation }) => {
                     setRequestStatus('approved');
                     return; // Valid permission found
                 }
-                // If expired, we don't return and let it fall through to check for a new pending request
+                // Permission expired — fall through to check pending request
             }
             
-            // 2. Check requests
-            const { data: reqData } = await supabase
+            // 2. Check requests — use limit(1) ordered by recency to safely handle any edge-case duplicates
+            const { data: reqRows } = await supabase
                 .from('music_requests')
                 .select('status')
                 .eq('user_id', user.id)
                 .eq('music_id', currentTrack.id)
-                .single();
+                .order('created_at', { ascending: false })
+                .limit(1);
+
+            const reqData = reqRows?.[0] ?? null;
 
             if (reqData) {
                 if (reqData.status === 'approved') setRequestStatus('approved');
@@ -204,10 +207,19 @@ const MusicPlayerScreen = ({ navigation }) => {
         try {
             // Optimistic update
             setRequestStatus('pending');
-            
+
+            // Delete ANY stale old request for this user+music (approved, rejected, expired)
+            // This prevents duplicate rows since music_requests has no unique constraint on (user_id, music_id)
+            await supabase
+                .from('music_requests')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('music_id', currentTrack.id);
+
+            // Insert a fresh pending request
             const { error } = await supabase
                 .from('music_requests')
-                .upsert({ user_id: user.id, music_id: currentTrack.id, status: 'pending' });
+                .insert({ user_id: user.id, music_id: currentTrack.id, status: 'pending' });
 
             if (error) {
                 setRequestStatus('none');

@@ -65,7 +65,7 @@ export const PlayerProvider = ({ children }) => {
                 playsInSilentModeIOS: true,
                 shouldDuckAndroid: true,
                 interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-                playThroughEarpieceAndroid: false,
+                playThroughEarpieceAndroid: false
             });
         } catch (e) {
             console.error('Error setting audio mode:', e);
@@ -78,15 +78,25 @@ export const PlayerProvider = ({ children }) => {
 
     // AppState listener moved further down so it can access sleep timer functions
 
-    // ─── Cleanup effect ───
+    // AppState listener moved further down so it can access sleep timer functions
+
+    // ─── Generaly application cleanup effect ───
     useEffect(() => {
         return () => {
             if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
             if (stallTimeoutRef.current) clearTimeout(stallTimeoutRef.current);
             if (bufferingHideTimeoutRef.current) clearTimeout(bufferingHideTimeoutRef.current);
             if (sleepTimerIntervalRef.current) clearInterval(sleepTimerIntervalRef.current);
+        };
+    }, []);
+
+    // ─── Sound unloader effect ───
+    useEffect(() => {
+        return () => {
             if (sound) {
-                sound.unloadAsync().catch(() => {});
+                try {
+                    sound.unloadAsync();
+                } catch(e) {}
             }
         };
     }, [sound]);
@@ -107,9 +117,9 @@ export const PlayerProvider = ({ children }) => {
         }
         // Pause or unload the current sound (works even while connecting)
         if (soundRef.current) {
-            soundRef.current.pauseAsync().catch(() =>
-                soundRef.current?.unloadAsync().catch(() => {})
-            );
+            try {
+                soundRef.current.unloadAsync();
+            } catch(e) {}
         }
         setIsPlaying(false);
         setIsBuffering(false);
@@ -183,12 +193,21 @@ export const PlayerProvider = ({ children }) => {
                 }
 
                 // Sleep timer hasn't expired — safe to resume if OS paused us
-                if (!sleepExpiredRef.current && soundRef.current && currentTrackRef.current) {
-                    soundRef.current.getStatusAsync().then((status) => {
-                        if (status.isLoaded && status.shouldPlay && !status.isPlaying) {
-                            soundRef.current.playAsync().catch(() => {});
+                if (!sleepExpiredRef.current && currentTrackRef.current) {
+                    if (soundRef.current) {
+                        try {
+                            if (!soundRef.current.playing) {
+                                soundRef.current.play();
+                            }
+                        } catch (e) {
+                            console.log('[AWAKE] Sound error. Reloading it...');
+                            playTrack(currentTrackRef.current);
                         }
-                    }).catch(() => {});
+                    } else {
+                        // Sound reference is missing completely? Reload current track
+                        console.log('[AWAKE] Sound missing. Reloading it...');
+                        playTrack(currentTrackRef.current);
+                    }
                 }
             }
         });
@@ -225,7 +244,7 @@ export const PlayerProvider = ({ children }) => {
         const nextMode = modes[(modes.indexOf(repeatMode) + 1) % modes.length];
         
         if (sound) {
-            await sound.setIsLoopingAsync(nextMode === 'one');
+            sound.loop = (nextMode === 'one');
         }
         setRepeatMode(nextMode);
         repeatModeRef.current = nextMode;
@@ -267,8 +286,11 @@ export const PlayerProvider = ({ children }) => {
             sleepEndTimeRef.current = null;
             setSleepSecondsState(0);
 
-            if (sound) {
-                await sound.unloadAsync().catch(() => {});
+            if (soundRef.current) {
+                try { 
+                    soundRef.current.pause();
+                    soundRef.current.remove(); 
+                } catch(e) {}
                 setSound(null);
                 soundRef.current = null;
             }
@@ -327,11 +349,11 @@ export const PlayerProvider = ({ children }) => {
         if (isSameTrack && sound && isContextMatch) {
             try {
                 const status = await sound.getStatusAsync();
-                if (status.isLoaded) {
-                    if (status.didJustFinish || status.positionMillis >= status.durationMillis - 100) {
+                if (!status.isPlaying) {
+                    if (status.positionMillis > 0 && Math.abs(status.durationMillis - status.positionMillis) < 500) {
                         await sound.setPositionAsync(0);
                     }
-                    if (!status.isPlaying) await sound.playAsync();
+                    await sound.playAsync();
                 }
             } catch (e) {}
             return;
@@ -362,7 +384,7 @@ export const PlayerProvider = ({ children }) => {
                 }
                 
                 if (soundRef.current) {
-                    await soundRef.current.unloadAsync().catch(() => {});
+                    try { await soundRef.current.unloadAsync(); } catch (e) {}
                     setSound(null);
                     soundRef.current = null;
                 }
@@ -371,17 +393,16 @@ export const PlayerProvider = ({ children }) => {
                     { uri: track.audio_url },
                     { 
                         shouldPlay: true, 
-                        isLooping: repeatModeRef.current === 'one',
-                        progressUpdateIntervalMillis: 500,
-                        positionMillis: savedPosition
+                        positionMillis: savedPosition,
+                        isLooping: repeatModeRef.current === 'one'
                     },
                     onPlaybackStatusUpdate
                 );
-
-                // Re-check sleep after the async createAsync call (may have taken time)
+                
+                // Re-check sleep after the synchronous load (if it took time)
                 if (sleepExpiredRef.current) {
                     console.log('[SLEEP] Aborting playback — sleep timer expired during load.');
-                    newSound.unloadAsync().catch(() => {});
+                    try { await newSound.unloadAsync(); } catch(e){}
                     setIsLoading(false);
                     isLoadingRef.current = false;
                     setLoadingTrackId(null);
@@ -430,7 +451,7 @@ export const PlayerProvider = ({ children }) => {
 
         if (isLast) {
             if (repeatModeRef.current === 'one') {
-                if (soundRef.current) await soundRef.current.setPositionAsync(0).catch(() => {});
+                if (soundRef.current) try { soundRef.current.seekTo(0); } catch(e){}
                 return;
             }
 
@@ -448,14 +469,22 @@ export const PlayerProvider = ({ children }) => {
                 return;
             }
 
-            // repeatMode 'none', no shuffle — stop at end
-            if (soundRef.current) {
-                await soundRef.current.stopAsync().catch(() => {});
-                await soundRef.current.setPositionAsync(0).catch(() => {});
+            // By default, if they hit the end of a playlist (like the home screen),
+            // let's loop back to the beginning instead of stopping abruptly.
+            if (sourceQueue && sourceQueue.length > 0) {
+                updateCurrentIndex(0);
+                await playTrack(sourceQueue[0]);
+            } else {
+                if (soundRef.current) {
+                    try { 
+                        soundRef.current.pause(); 
+                        soundRef.current.seekTo(0); 
+                    } catch(e){}
+                }
+                setPosition(0);
+                setIsPlaying(false);
+                setIsBuffering(false);
             }
-            setPosition(0);
-            setIsPlaying(false);
-            setIsBuffering(false);
             return;
         }
 
@@ -472,7 +501,7 @@ export const PlayerProvider = ({ children }) => {
         
         // If we are more than 3 seconds into a track, restart it instead of going back
         if (lastPositionRef.current > 3000) {
-            if (soundRef.current) await soundRef.current.setPositionAsync(0).catch(() => {});
+            if (soundRef.current) try { await soundRef.current.setPositionAsync(0); } catch(e){}
             return;
         }
 
@@ -483,33 +512,29 @@ export const PlayerProvider = ({ children }) => {
 
     const onPlaybackStatusUpdate = (status) => {
         if (!status || !status.isLoaded) {
-            if (status?.error) {
+            if (status && status.error) {
                 console.log('[RECONNECTING] Playback monitor error:', status.error);
                 setIsBuffering(true);
             }
-            
-            // ─── FIX: Sound unloaded unexpectedly (phone sleep, call interruption, etc.) ───
-            // Only reconnect if we are NOT already loading a new track.
             if (currentTrackRef.current && !isLoadingRef.current) {
                 console.log('[RECONNECTING] Sound unloaded unexpectedly, restarting...');
-                // Don't set isPlaying false before playTrack or we get a flicker
                 playTrack(currentTrackRef.current);
             }
             return;
         }
 
-        // Transition from "loading metadata" to "buffering stream"
         if (isLoadingRef.current && status.isLoaded) {
             setIsLoading(false);
             isLoadingRef.current = false;
             setLoadingTrackId(null);
         }
 
-        // Nudge a stuck stream
         if (status.isLoaded && status.shouldPlay && !status.isPlaying && !status.isBuffering) {
             if (!stallTimeoutRef.current) {
                 stallTimeoutRef.current = setTimeout(() => {
-                    if (soundRef.current) soundRef.current.playAsync().catch(() => {});
+                    if (soundRef.current) {
+                        try { soundRef.current.playAsync(); } catch(e) {}
+                    }
                     stallTimeoutRef.current = null;
                 }, 1500);
             }
@@ -545,11 +570,11 @@ export const PlayerProvider = ({ children }) => {
         setIsPlaying(status.isPlaying);
         
         if (status.positionMillis !== undefined) {
-            setPosition(status.positionMillis);
+            setPosition(status.positionMillis / 1000);
             lastPositionRef.current = status.positionMillis;
         }
         if (status.durationMillis !== undefined) {
-            setDuration(status.durationMillis);
+            setDuration(status.durationMillis / 1000);
         }
 
         // Auto-advance to next track
@@ -580,9 +605,8 @@ export const PlayerProvider = ({ children }) => {
             return;
         }
         try {
-            const status = await sound.getStatusAsync();
-            if (status.isLoaded) {
-                if (status.isPlaying) {
+            if (sound) {
+                if (isPlaying) {
                     await sound.pauseAsync();
                     setIsPlaying(false);
                     setIsBuffering(false);
@@ -590,11 +614,6 @@ export const PlayerProvider = ({ children }) => {
                     // User manually resumed, clear any sleep expiry state
                     sleepExpiredRef.current = false;
 
-                    if (status.didJustFinish || status.positionMillis >= status.durationMillis - 100) {
-                        await sound.setPositionAsync(0);
-                    }
-                    lastPositionRef.current = status.positionMillis;
-                    setIsBuffering(false);
                     await sound.playAsync();
                 }
             }
@@ -631,8 +650,8 @@ export const PlayerProvider = ({ children }) => {
     const seek = async (value) => {
         if (!sound) return;
         try {
-            await sound.setPositionAsync(value);
-            lastPositionRef.current = value;
+            await sound.setPositionAsync(value * 1000);
+            lastPositionRef.current = value * 1000;
         } catch (e) {}
     };
 
