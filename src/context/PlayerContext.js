@@ -167,50 +167,53 @@ export const PlayerProvider = ({ children }) => {
 
     // ─── AppState listener — re-apply audio mode + enforce/refresh sleep timer ───
     useEffect(() => {
-        const subscription = AppState.addEventListener('change', (nextState) => {
-            const prevState = appStateRef.current;
-            appStateRef.current = nextState;
+            const handleAppStateChange = async (nextState) => {
+                const prevState = appStateRef.current;
+                appStateRef.current = nextState;
 
-            if (
-                (prevState === 'background' || prevState === 'inactive') &&
-                nextState === 'active'
-            ) {
-                // Re-apply audio mode (OS may have revoked the session while sleeping)
-                setupAudioMode();
+                if (
+                    (prevState === 'background' || prevState === 'inactive') &&
+                    nextState === 'active'
+                ) {
+                    // Re-apply audio mode (OS may have revoked the session while sleeping)
+                    setupAudioMode();
 
-                // Check if sleep timer expired while we were asleep
-                if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current) {
-                    fireSleepExpiry();
-                    return; // Do NOT resume music
-                }
+                    // Check if sleep timer expired while we were asleep
+                    if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current) {
+                        fireSleepExpiry();
+                        return; // Do NOT resume music
+                    }
 
-                // If timer hasn't expired but is running, force update the frozen UI
-                // and restart the interval so it aligns snappily with wake
-                if (sleepEndTimeRef.current && !sleepExpiredRef.current) {
-                    const remaining = Math.max(0, Math.floor((sleepEndTimeRef.current - Date.now()) / 1000));
-                    setSleepSecondsState(remaining);
-                    startSleepTimer();
-                }
+                    // If timer hasn't expired but is running, force update the frozen UI
+                    // and restart the interval so it aligns snappily with wake
+                    if (sleepEndTimeRef.current && !sleepExpiredRef.current) {
+                        const remaining = Math.max(0, Math.floor((sleepEndTimeRef.current - Date.now()) / 1000));
+                        setSleepSecondsState(remaining);
+                        startSleepTimer();
+                    }
 
-                // Sleep timer hasn't expired — safe to resume if OS paused us
-                if (!sleepExpiredRef.current && currentTrackRef.current) {
-                    if (soundRef.current) {
-                        try {
-                            if (!soundRef.current.playing) {
-                                soundRef.current.play();
+                    // Sleep timer hasn't expired — safe to resume if OS paused us
+                    if (!sleepExpiredRef.current && currentTrackRef.current) {
+                        if (soundRef.current) {
+                            try {
+                                const status = await soundRef.current.getStatusAsync();
+                                if (status.isLoaded && !status.isPlaying && status.shouldPlay) {
+                                    await soundRef.current.playAsync();
+                                }
+                            } catch (e) {
+                                console.log('[AWAKE] Sound error. Reloading it...');
+                                playTrack(currentTrackRef.current);
                             }
-                        } catch (e) {
-                            console.log('[AWAKE] Sound error. Reloading it...');
+                        } else {
+                            // Sound reference is missing completely? Reload current track
+                            console.log('[AWAKE] Sound missing. Reloading it...');
                             playTrack(currentTrackRef.current);
                         }
-                    } else {
-                        // Sound reference is missing completely? Reload current track
-                        console.log('[AWAKE] Sound missing. Reloading it...');
-                        playTrack(currentTrackRef.current);
                     }
                 }
-            }
-        });
+            };
+
+            const subscription = AppState.addEventListener('change', handleAppStateChange);
 
         return () => subscription.remove();
     }, []);
@@ -244,7 +247,9 @@ export const PlayerProvider = ({ children }) => {
         const nextMode = modes[(modes.indexOf(repeatMode) + 1) % modes.length];
         
         if (sound) {
-            sound.loop = (nextMode === 'one');
+            try {
+                await sound.setIsLoopingAsync(nextMode === 'one');
+            } catch (e) {}
         }
         setRepeatMode(nextMode);
         repeatModeRef.current = nextMode;
@@ -288,8 +293,8 @@ export const PlayerProvider = ({ children }) => {
 
             if (soundRef.current) {
                 try { 
-                    soundRef.current.pause();
-                    soundRef.current.remove(); 
+                    await soundRef.current.stopAsync();
+                    await soundRef.current.unloadAsync(); 
                 } catch(e) {}
                 setSound(null);
                 soundRef.current = null;
@@ -451,7 +456,7 @@ export const PlayerProvider = ({ children }) => {
 
         if (isLast) {
             if (repeatModeRef.current === 'one') {
-                if (soundRef.current) try { soundRef.current.seekTo(0); } catch(e){}
+                if (soundRef.current) try { await soundRef.current.setPositionAsync(0); } catch(e){}
                 return;
             }
 
@@ -477,8 +482,8 @@ export const PlayerProvider = ({ children }) => {
             } else {
                 if (soundRef.current) {
                     try { 
-                        soundRef.current.pause(); 
-                        soundRef.current.seekTo(0); 
+                        await soundRef.current.pauseAsync(); 
+                        await soundRef.current.setPositionAsync(0); 
                     } catch(e){}
                 }
                 setPosition(0);
