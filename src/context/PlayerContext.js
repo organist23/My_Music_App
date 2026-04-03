@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+import { AppState } from 'react-native';
 import { Audio, InterruptionModeIOS, InterruptionModeAndroid } from 'expo-av';
 import { useAuth } from './AuthContext';
 
@@ -17,20 +18,19 @@ export const PlayerProvider = ({ children }) => {
     const [currentIndex, setCurrentIndex] = useState(-1);
     const [isShuffle, setIsShuffle] = useState(false);
     const [repeatMode, setRepeatMode] = useState('none'); // 'none', 'all', 'one'
-    const [playingFrom, setPlayingFrom] = useState(null); // { type: 'playlist' | 'dashboard' | 'favorites', id: string | null }
+    const [playingFrom, setPlayingFrom] = useState(null);
     const [loadingTrackId, setLoadingTrackId] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [sleepSeconds, setSleepSecondsState] = useState(0); // 0 means off
     const sleepEndTimeRef = useRef(null);
     const soundRef = useRef(null);
 
-    // Refs to avoid stale closures in onPlaybackStatusUpdate
+    // ─── Refs to avoid stale closures in callbacks ───
     const queueRef = useRef(queue);
     const shuffledQueueRef = useRef(shuffledQueue);
     const currentIndexRef = useRef(currentIndex);
     const isShuffleRef = useRef(isShuffle);
     const lastPositionRef = useRef(0);
-    const lastPositionTimeRef = useRef(Date.now());
     const repeatModeRef = useRef(repeatMode);
     const currentTrackRef = useRef(currentTrack);
     const isLoadingRef = useRef(false);
@@ -38,7 +38,12 @@ export const PlayerProvider = ({ children }) => {
     const stallTimeoutRef = useRef(null);
     const bufferingHideTimeoutRef = useRef(null);
     const isBufferingRef = useRef(false);
+    const sleepTimerIntervalRef = useRef(null);
+    const appStateRef = useRef(AppState.currentState);
+    // True if the sleep timer fired — blocks music from (re)starting after expiry
+    const sleepExpiredRef = useRef(false);
 
+    // Keep all refs in sync with state
     useEffect(() => {
         queueRef.current = queue;
         shuffledQueueRef.current = shuffledQueue;
@@ -50,66 +55,146 @@ export const PlayerProvider = ({ children }) => {
         isBufferingRef.current = isBuffering;
     }, [queue, shuffledQueue, currentIndex, isShuffle, repeatMode, currentTrack, sound, isBuffering]);
 
-    // Initial Audio mode setup
+    // ─── Audio Mode Setup ───
+    const setupAudioMode = async () => {
+        try {
+            await Audio.setAudioModeAsync({
+                allowsRecordingIOS: false,
+                staysActiveInBackground: true,
+                interruptionModeIOS: InterruptionModeIOS.DoNotMix,
+                playsInSilentModeIOS: true,
+                shouldDuckAndroid: true,
+                interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
+                playThroughEarpieceAndroid: false,
+            });
+        } catch (e) {
+            console.error('Error setting audio mode:', e);
+        }
+    };
+
     useEffect(() => {
-        const setupAudio = async () => {
-            try {
-                await Audio.setAudioModeAsync({
-                    allowsRecordingIOS: false,
-                    staysActiveInBackground: true,
-                    interruptionModeIOS: InterruptionModeIOS.DoNotMix,
-                    playsInSilentModeIOS: true,
-                    shouldDuckAndroid: true,
-                    interruptionModeAndroid: InterruptionModeAndroid.DoNotMix,
-                    playThroughEarpieceAndroid: false,
-                });
-            } catch (e) {
-                console.error('Error setting audio mode:', e);
-            }
-        };
-        setupAudio();
+        setupAudioMode();
     }, []);
 
-    // Cleanup effect
+    // AppState listener moved further down so it can access sleep timer functions
+
+    // ─── Cleanup effect ───
     useEffect(() => {
         return () => {
             if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
             if (stallTimeoutRef.current) clearTimeout(stallTimeoutRef.current);
             if (bufferingHideTimeoutRef.current) clearTimeout(bufferingHideTimeoutRef.current);
+            if (sleepTimerIntervalRef.current) clearInterval(sleepTimerIntervalRef.current);
             if (sound) {
                 sound.unloadAsync().catch(() => {});
             }
         };
     }, [sound]);
 
-    // Sleep Timer UI Sync Countdown (Keep for foreground visual only)
-    useEffect(() => {
-        let timer;
-        if (sleepSeconds > 0 && isPlaying) {
-            timer = setInterval(() => {
-                const remaining = sleepEndTimeRef.current ? Math.max(0, Math.floor((sleepEndTimeRef.current - Date.now()) / 1000)) : 0;
-                setSleepSecondsState(remaining);
-                
-                if (remaining <= 0) {
-                    clearInterval(timer);
-                    sleepEndTimeRef.current = null;
-                }
-            }, 1000);
+    // ─── Sleep Timer ───
+    // The interval runs every second to update the UI countdown.
+    // It works regardless of whether music is playing or connecting.
+    // A secondary check in onPlaybackStatusUpdate catches the case where
+    // setInterval is throttled by the OS (phone sleep).
+    const fireSleepExpiry = () => {
+        console.log('[SLEEP] Timer expired — stopping music.');
+        sleepExpiredRef.current = true;  // Block music from restarting
+        sleepEndTimeRef.current = null;
+        setSleepSecondsState(0);
+        if (sleepTimerIntervalRef.current) {
+            clearInterval(sleepTimerIntervalRef.current);
+            sleepTimerIntervalRef.current = null;
         }
-        return () => {
-            if (timer) clearInterval(timer);
-        };
-    }, [sleepSeconds > 0, isPlaying]);
+        // Pause or unload the current sound (works even while connecting)
+        if (soundRef.current) {
+            soundRef.current.pauseAsync().catch(() =>
+                soundRef.current?.unloadAsync().catch(() => {})
+            );
+        }
+        setIsPlaying(false);
+        setIsBuffering(false);
+    };
+
+    const startSleepTimer = () => {
+        if (sleepTimerIntervalRef.current) {
+            clearInterval(sleepTimerIntervalRef.current);
+            sleepTimerIntervalRef.current = null;
+        }
+
+        sleepTimerIntervalRef.current = setInterval(() => {
+            if (!sleepEndTimeRef.current) {
+                clearInterval(sleepTimerIntervalRef.current);
+                sleepTimerIntervalRef.current = null;
+                return;
+            }
+            const remaining = Math.max(0, Math.floor((sleepEndTimeRef.current - Date.now()) / 1000));
+            // Always update the UI display, even while buffering
+            setSleepSecondsState(remaining);
+
+            if (remaining <= 0) {
+                fireSleepExpiry();
+            }
+        }, 1000);
+    };
 
     const setSleepSeconds = (seconds) => {
+        if (sleepTimerIntervalRef.current) {
+            clearInterval(sleepTimerIntervalRef.current);
+            sleepTimerIntervalRef.current = null;
+        }
+        // Reset expired flag whenever the user sets a new timer
+        sleepExpiredRef.current = false;
+
         if (seconds <= 0) {
             setSleepSecondsState(0);
             sleepEndTimeRef.current = null;
         } else {
-            setSleepSecondsState(seconds);
             sleepEndTimeRef.current = Date.now() + (seconds * 1000);
+            setSleepSecondsState(seconds);
+            startSleepTimer();
         }
     };
+
+    // ─── AppState listener — re-apply audio mode + enforce/refresh sleep timer ───
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (nextState) => {
+            const prevState = appStateRef.current;
+            appStateRef.current = nextState;
+
+            if (
+                (prevState === 'background' || prevState === 'inactive') &&
+                nextState === 'active'
+            ) {
+                // Re-apply audio mode (OS may have revoked the session while sleeping)
+                setupAudioMode();
+
+                // Check if sleep timer expired while we were asleep
+                if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current) {
+                    fireSleepExpiry();
+                    return; // Do NOT resume music
+                }
+
+                // If timer hasn't expired but is running, force update the frozen UI
+                // and restart the interval so it aligns snappily with wake
+                if (sleepEndTimeRef.current && !sleepExpiredRef.current) {
+                    const remaining = Math.max(0, Math.floor((sleepEndTimeRef.current - Date.now()) / 1000));
+                    setSleepSecondsState(remaining);
+                    startSleepTimer();
+                }
+
+                // Sleep timer hasn't expired — safe to resume if OS paused us
+                if (!sleepExpiredRef.current && soundRef.current && currentTrackRef.current) {
+                    soundRef.current.getStatusAsync().then((status) => {
+                        if (status.isLoaded && status.shouldPlay && !status.isPlaying) {
+                            soundRef.current.playAsync().catch(() => {});
+                        }
+                    }).catch(() => {});
+                }
+            }
+        });
+
+        return () => subscription.remove();
+    }, []);
 
     const shuffleArray = (array) => {
         const shuffled = [...array];
@@ -143,42 +228,57 @@ export const PlayerProvider = ({ children }) => {
             await sound.setIsLoopingAsync(nextMode === 'one');
         }
         setRepeatMode(nextMode);
+        repeatModeRef.current = nextMode;
     };
 
+    // ─── FIX: toggleShuffle — immediately sync refs (don't wait for useEffect) ───
+    // Previously the ref update was delayed by one render cycle. If playNext()
+    // fired between the state update and the useEffect sync, it used the wrong
+    // queue. Now we sync the refs immediately inside toggleShuffle itself.
     const toggleShuffle = () => {
-        const nextShuffle = !isShuffle;
+        const nextShuffle = !isShuffleRef.current;
         setIsShuffle(nextShuffle);
-        isShuffleRef.current = nextShuffle;
-        
+        isShuffleRef.current = nextShuffle; // Sync ref immediately
+
         if (nextShuffle) {
-            // Spotify Logic: Keep current track, shuffle the rest
+            // Spotify Logic: Keep current track first, shuffle the rest
             if (queueRef.current.length > 0) {
                 const track = currentTrackRef.current;
                 const remaining = queueRef.current.filter(t => t.id !== track?.id);
                 const shuffled = track ? [track, ...shuffleArray(remaining)] : shuffleArray(queueRef.current);
                 updateShuffledQueue(shuffled);
-                updateCurrentIndex(0); // Current track is at 0
+                updateCurrentIndex(0); // Current track is at index 0 in shuffled queue
             }
         } else {
-            // Spotify Logic: Restore original order
+            // Restore position in the original queue
             const index = queueRef.current.findIndex(t => t.id === currentTrackRef.current?.id);
-            if (index !== -1) updateCurrentIndex(index);
+            updateCurrentIndex(index !== -1 ? index : 0);
+            // Clear shuffled queue so playNext picks from queueRef
+            updateShuffledQueue([]);
         }
     };
 
     const stopPlayback = async () => {
         try {
+            if (sleepTimerIntervalRef.current) {
+                clearInterval(sleepTimerIntervalRef.current);
+                sleepTimerIntervalRef.current = null;
+            }
+            sleepEndTimeRef.current = null;
+            setSleepSecondsState(0);
+
             if (sound) {
                 await sound.unloadAsync().catch(() => {});
                 setSound(null);
+                soundRef.current = null;
             }
             setIsPlaying(false);
             setIsBuffering(false);
             setCurrentTrack(null);
             currentTrackRef.current = null;
             updateCurrentIndex(-1);
-            setQueue([]);
-            setShuffledQueue([]);
+            updateQueue([]);
+            updateShuffledQueue([]);
         } catch (e) {
             console.error('Error stopping playback:', e);
         }
@@ -210,7 +310,11 @@ export const PlayerProvider = ({ children }) => {
             }
         }
         
-        const sourceQueue = isShuffleRef.current ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : queueRef.current) : queueRef.current;
+        // ─── FIX: Use the already-synced refs for index lookup ───
+        // Previously used stale state; now refs are always up-to-date.
+        const sourceQueue = isShuffleRef.current
+            ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : queueRef.current)
+            : queueRef.current;
         const index = sourceQueue.findIndex(t => t.id === track.id);
         if (index !== -1) updateCurrentIndex(index);
 
@@ -221,7 +325,6 @@ export const PlayerProvider = ({ children }) => {
             try {
                 const status = await sound.getStatusAsync();
                 if (status.isLoaded) {
-                    // Spotify/Premium logic: If track is finished or at very end, restart it
                     if (status.didJustFinish || status.positionMillis >= status.durationMillis - 100) {
                         await sound.setPositionAsync(0);
                     }
@@ -233,21 +336,24 @@ export const PlayerProvider = ({ children }) => {
 
         if (isLoadingRef.current && isSameTrack && newQueue.length === 0) return;
         
-        // Spotify UX: Save current position if it's a same-track retry
         const savedPosition = isSameTrack ? (lastPositionRef.current || 0) : 0;
 
         const attemptPlay = async (retryCount = 0) => {
+            // ─── Sleep guard: abort if sleep already expired while we were loading ───
+            if (sleepExpiredRef.current) {
+                console.log('[SLEEP] Aborting track load — sleep timer already expired.');
+                setIsLoading(false);
+                isLoadingRef.current = false;
+                setLoadingTrackId(null);
+                return;
+            }
+
             try {
                 setIsLoading(true);
                 setLoadingTrackId(track.id);
                 isLoadingRef.current = true;
-                // Don't set isBuffering here to avoid flickering; 
-                // onPlaybackStatusUpdate will handle it.
                 setCurrentTrack(track);
                 currentTrackRef.current = track;
-                // Spotify Smooth Transition Fix: 
-                // Don't flip isPlaying to false if we are transitioning between tracks
-                // while already in a "Playing" intent.
                 if (!isPlaying && !isBuffering) {
                     setIsPlaying(false);
                 }
@@ -263,29 +369,34 @@ export const PlayerProvider = ({ children }) => {
                     { 
                         shouldPlay: true, 
                         isLooping: repeatModeRef.current === 'one',
-                        progressUpdateIntervalMillis: 100,
+                        progressUpdateIntervalMillis: 500,
                         positionMillis: savedPosition
                     },
                     onPlaybackStatusUpdate
                 );
 
+                // Re-check sleep after the async createAsync call (may have taken time)
+                if (sleepExpiredRef.current) {
+                    console.log('[SLEEP] Aborting playback — sleep timer expired during load.');
+                    newSound.unloadAsync().catch(() => {});
+                    setIsLoading(false);
+                    isLoadingRef.current = false;
+                    setLoadingTrackId(null);
+                    setIsPlaying(false);
+                    return;
+                }
+
                 setSound(newSound);
+                soundRef.current = newSound;
                 lastPositionRef.current = savedPosition; 
-                lastPositionTimeRef.current = Date.now();
-                // isPlaying will be updated by onPlaybackStatusUpdate
                 
-                // We no longer clear isLoading/isBuffering here.
-                // We wait for onPlaybackStatusUpdate to detect actual progress.
-                
-                // Stall detector
                 stallTimeoutRef.current = setTimeout(() => {
-                    if (isLoadingRef.current || isBuffering) {
+                    if (isLoadingRef.current || isBufferingRef.current) {
                         console.warn('Playback stalled, waiting for connection...');
                     }
                 }, 10000);
 
             } catch (error) {
-                // Change console.error to console.log for a friendlier retry experience
                 console.log(`[RECONNECTING] Attempt ${retryCount + 1}:`, error.message || error);
                 setIsBuffering(true); 
                 
@@ -305,36 +416,39 @@ export const PlayerProvider = ({ children }) => {
     };
 
     const playNext = async () => {
-        const sourceQueue = isShuffleRef.current ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : queueRef.current) : queueRef.current;
+        // ─── FIX: Read the correct source queue using the already-synced ref ───
+        const sourceQueue = isShuffleRef.current
+            ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : queueRef.current)
+            : queueRef.current;
         if (sourceQueue.length === 0) return;
         
-        // Safety: ensure current index is within bounds
         const currentIdx = Math.max(0, Math.min(currentIndexRef.current, sourceQueue.length - 1));
         const isLast = currentIdx === sourceQueue.length - 1;
 
         if (isLast) {
-            // Priority: If Repeat-One is on, loop the same track (handled by expo-av, but safety here)
             if (repeatModeRef.current === 'one') {
-                if (sound) await sound.setPositionAsync(0).catch(() => {});
+                if (soundRef.current) await soundRef.current.setPositionAsync(0).catch(() => {});
                 return;
             }
 
-            // If Repeat-All or Shuffle is on, we continue playback
             if (repeatModeRef.current === 'all' || isShuffleRef.current) {
                 if (isShuffleRef.current) {
+                    // Re-shuffle the full original queue for the next round
                     const reshuffled = shuffleArray(queueRef.current);
                     updateShuffledQueue(reshuffled);
+                    updateCurrentIndex(0);
                     await playTrack(reshuffled[0]);
                 } else {
+                    updateCurrentIndex(0);
                     await playTrack(sourceQueue[0]);
                 }
                 return;
             }
 
-            // Otherwise (repeatMode === 'none' and no shuffle), we STOP at the end
-            if (sound) {
-                await sound.stopAsync().catch(() => {});
-                await sound.setPositionAsync(0).catch(() => {});
+            // repeatMode 'none', no shuffle — stop at end
+            if (soundRef.current) {
+                await soundRef.current.stopAsync().catch(() => {});
+                await soundRef.current.setPositionAsync(0).catch(() => {});
             }
             setPosition(0);
             setIsPlaying(false);
@@ -343,16 +457,24 @@ export const PlayerProvider = ({ children }) => {
         }
 
         const nextIndex = currentIdx + 1;
-        if (nextIndex < sourceQueue.length) {
-            await playTrack(sourceQueue[nextIndex]);
-        }
+        updateCurrentIndex(nextIndex);
+        await playTrack(sourceQueue[nextIndex]);
     };
 
     const playPrev = async () => {
-        const sourceQueue = isShuffleRef.current ? shuffledQueueRef.current : queueRef.current;
+        const sourceQueue = isShuffleRef.current
+            ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : queueRef.current)
+            : queueRef.current;
         if (sourceQueue.length === 0) return;
         
+        // If we are more than 3 seconds into a track, restart it instead of going back
+        if (lastPositionRef.current > 3000) {
+            if (soundRef.current) await soundRef.current.setPositionAsync(0).catch(() => {});
+            return;
+        }
+
         const prevIndex = (currentIndexRef.current - 1 + sourceQueue.length) % sourceQueue.length;
+        updateCurrentIndex(prevIndex);
         await playTrack(sourceQueue[prevIndex]);
     };
 
@@ -363,63 +485,46 @@ export const PlayerProvider = ({ children }) => {
                 setIsBuffering(true);
             }
             
-            // If we are supposed to be playing but the sound unloaded (fatal connection drop)
-            if (currentTrackRef.current && isPlaying && !isLoadingRef.current) {
-                console.log('[RECONNECTING] Sound object unloaded unexpectedly, restarting...');
-                setIsPlaying(false); // Prevent infinite loop before next play attempt
+            // ─── FIX: Sound unloaded unexpectedly (phone sleep, call interruption, etc.) ───
+            // Only reconnect if we are NOT already loading a new track.
+            if (currentTrackRef.current && !isLoadingRef.current) {
+                console.log('[RECONNECTING] Sound unloaded unexpectedly, restarting...');
+                // Don't set isPlaying false before playTrack or we get a flicker
                 playTrack(currentTrackRef.current);
-                // If it unloads and we weren't expecting it (and not in loading state),
-                // make sure we stop showing as "playing"
-                setIsPlaying(false);
-                setIsBuffering(false);
-                setIsLoading(false);
-                isLoadingRef.current = false;
-                setLoadingTrackId(null);
             }
             return;
         }
 
-        // Initial Load Cleanup: 
-        // We wait until the track is actually playing OR loaded to clear the loader,
-        // but we keep isPlaying true if we are in a transition.
-        // Initial Load Cleanup: 
-        // Once the sound object is created (isLoaded), we transition from "Loading" (metadata/setup)
-        // to "Buffering" (network stream status). This prevents the initial loader from 
-        // getting stuck if the stream is slow but the object is technically ready.
+        // Transition from "loading metadata" to "buffering stream"
         if (isLoadingRef.current && status.isLoaded) {
             setIsLoading(false);
             isLoadingRef.current = false;
             setLoadingTrackId(null);
         }
 
-        // INITIAL LOAD SYNC
+        // Nudge a stuck stream
         if (status.isLoaded && status.shouldPlay && !status.isPlaying && !status.isBuffering) {
             if (!stallTimeoutRef.current) {
                 stallTimeoutRef.current = setTimeout(() => {
                     if (soundRef.current) soundRef.current.playAsync().catch(() => {});
                     stallTimeoutRef.current = null;
-                }, 1500); // Reduced to 1.5s for snappier feel
+                }, 1500);
             }
         }
 
-        // BUFFERING LOGIC (The "Spotify Smooth" Fix)
-        // We use isBufferingRef.current to avoid stale closure issues during network jumps.
+        // Buffering indicator
         let isActuallyBuffering = status.isBuffering || (status.shouldPlay && !status.isPlaying);
-
         if (status.isPlaying || !status.shouldPlay) {
             isActuallyBuffering = false;
         }
 
         if (isActuallyBuffering) {
-            // Show loader immediately
             if (bufferingHideTimeoutRef.current) {
                 clearTimeout(bufferingHideTimeoutRef.current);
                 bufferingHideTimeoutRef.current = null;
             }
             if (!isBufferingRef.current) setIsBuffering(true);
         } else {
-            // STALENESS FIX: If audibly playing, clear buffering immediately.
-            // Don't wait for a timer if the music is already in the user's ears.
             if (status.isPlaying) {
                 if (bufferingHideTimeoutRef.current) {
                     clearTimeout(bufferingHideTimeoutRef.current);
@@ -427,17 +532,15 @@ export const PlayerProvider = ({ children }) => {
                 }
                 setIsBuffering(false);
             } else if (isBufferingRef.current && !bufferingHideTimeoutRef.current) {
-                // If not playing (e.g. paused), use the smooth exit timer
                 bufferingHideTimeoutRef.current = setTimeout(() => {
                     setIsBuffering(false);
                     bufferingHideTimeoutRef.current = null;
-                }, 500); // reduced to 500ms for responsiveness
+                }, 500);
             }
         }
 
         setIsPlaying(status.isPlaying);
         
-        // SYNC PROGRESS (Crucial for all UI bars)
         if (status.positionMillis !== undefined) {
             setPosition(status.positionMillis);
             lastPositionRef.current = status.positionMillis;
@@ -446,27 +549,22 @@ export const PlayerProvider = ({ children }) => {
             setDuration(status.durationMillis);
         }
 
-        // Auto-play next track logic
+        // Auto-advance to next track
         if (status.didJustFinish && !status.isLooping) {
-            // Ensure we clear isPlaying briefly only if queue is empty (handled in playNext)
             playNext();
         }
 
-        // SLEEP TIMER BACKGROUND TERMINATE (Robust fix)
-        if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current && status.isPlaying) {
-            console.log('[SLEEP] Timer expired, stopping music...');
-            sleepEndTimeRef.current = null;
-            setSleepSecondsState(0);
-            if (soundRef.current) {
-                soundRef.current.pauseAsync().catch(() => {});
-            }
-            setIsPlaying(false);
+        // ─── Sleep timer backup check (fires on EVERY status update) ───
+        // setInterval is throttled by the OS when the screen is off.
+        // This catch handles both "buffering" and "playing" states,
+        // so the timer works even when music is connecting.
+        if (sleepEndTimeRef.current && Date.now() >= sleepEndTimeRef.current) {
+            fireSleepExpiry();
         }
     };
 
     const togglePlayPause = async () => {
         if (!sound) {
-            // Cancel loading logic (Spotify UX)
             if (isLoadingRef.current) {
                 console.log('Cancelling track load attempt...');
                 setIsLoading(false);
@@ -486,15 +584,11 @@ export const PlayerProvider = ({ children }) => {
                     setIsPlaying(false);
                     setIsBuffering(false);
                 } else {
-                    // UX Fix: If track is at the end, restart it
                     if (status.didJustFinish || status.positionMillis >= status.durationMillis - 100) {
                         await sound.setPositionAsync(0);
                     }
-                    
-                    // Force-clear any previous stall state when resuming
-                    lastPositionTimeRef.current = Date.now();
+                    lastPositionRef.current = status.positionMillis;
                     setIsBuffering(false);
-                    
                     await sound.playAsync();
                 }
             }
@@ -506,13 +600,13 @@ export const PlayerProvider = ({ children }) => {
     const syncQueue = (newList, context = null) => {
         if (!newList || newList.length === 0) return;
         
-        // Only sync if the context matches (e.g. we are playing from the dashboard we just refreshed)
         if (context && playingFrom?.type === context.type && playingFrom?.id === context.id) {
             updateQueue(newList);
             
-            // Re-map the current index to the new list
             if (currentTrackRef.current) {
-                const newSource = isShuffleRef.current ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : newList) : newList;
+                const newSource = isShuffleRef.current
+                    ? (shuffledQueueRef.current.length > 0 ? shuffledQueueRef.current : newList)
+                    : newList;
                 const newIndex = newSource.findIndex(t => t.id === currentTrackRef.current.id);
                 if (newIndex !== -1) {
                     updateCurrentIndex(newIndex);
@@ -522,9 +616,7 @@ export const PlayerProvider = ({ children }) => {
     };
 
     const reconnectIfStalled = () => {
-        // If we are currently "connecting" or "buffering" and the user manually refreshes the UI,
-        // it's a good time to force a fresh connection attempt since internet is likely back.
-        if ((isLoadingRef.current || isBuffering) && currentTrackRef.current) {
+        if ((isLoadingRef.current || isBufferingRef.current) && currentTrackRef.current) {
             console.log('[RECONNECTING] Manual refresh detected, force-restarting stalled track...');
             playTrack(currentTrackRef.current);
         }
@@ -534,6 +626,7 @@ export const PlayerProvider = ({ children }) => {
         if (!sound) return;
         try {
             await sound.setPositionAsync(value);
+            lastPositionRef.current = value;
         } catch (e) {}
     };
 
